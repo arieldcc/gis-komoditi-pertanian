@@ -1,0 +1,313 @@
+@import 'bootstrap/dist/css/bootstrap.min.css';
+@import 'bootstrap-icons/font/bootstrap-icons.css';
+@import 'datatables.net-bs5/css/dataTables.bootstrap5.min.css';
+@import 'leaflet/dist/leaflet.css';
+
+:root {
+    --agri-green: #1e7b4f;
+    --agri-leaf: #8ebf3f;
+    --agri-soil: #8a5a35;
+    --agri-sand: #f3ecd6;
+    --agri-dark: #173b2f;
+}
+
+body {
+    background-color: #f7f8f4;
+    color: #1f2d1f;
+}
+
+.navbar-brand-mark {
+    display: inline-flex;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 999px;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    background: linear-gradient(140deg, var(--agri-green), var(--agri-leaf));
+    box-shadow: 0 6px 16px rgba(30, 123, 79, 0.35);
+}
+
+.hero-gradient {
+    background:
+        radial-gradient(1200px 400px at -10% -20%, rgba(142, 191, 63, 0.25), transparent 45%),
+        radial-gradient(1200px 400px at 120% 120%, rgba(30, 123, 79, 0.3), transparent 45%),
+        linear-gradient(140deg, #f8faef 0%, #f0f6e3 44%, #e4f1d8 100%);
+}
+
+.hero-panel {
+    border: 1px solid rgba(30, 123, 79, 0.15);
+    background-color: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(8px);
+}
+
+.section-title {
+    color: var(--agri-dark);
+    font-weight: 700;
+}
+
+.stat-box {
+    border: 1px solid rgba(30, 123, 79, 0.13);
+    background: #fff;
+    border-radius: 0.9rem;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.stat-box:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 24px rgba(23, 59, 47, 0.12);
+}
+
+.commodity-card {
+    border: 1px solid #e0e7d2;
+    background: #fff;
+    border-radius: 1rem;
+}
+
+.commodity-badge {
+    background: rgba(142, 191, 63, 0.15);
+    color: #436226;
+    font-weight: 600;
+}
+
+.panel-card {
+    border: 1px solid rgba(23, 59, 47, 0.12);
+    border-radius: 0.9rem;
+    background: #fff;
+}
+
+.dashboard-kpi-card {
+    background:
+        linear-gradient(140deg, rgba(30, 123, 79, 0.08), rgba(142, 191, 63, 0.03)),
+        #fff;
+}
+
+.dashboard-chart-box {
+    width: 100%;
+    min-height: 320px;
+}
+
+.dashboard-chart-candlestick {
+    min-height: 360px;
+}
+
+.dashboard-activity-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+    max-height: 360px;
+    overflow: auto;
+    padding-right: 0.25rem;
+}
+
+.dashboard-activity-item {
+    border: 1px solid rgba(23, 59, 47, 0.1);
+    border-radius: 0.7rem;
+    padding: 0.6rem 0.7rem;
+    background: #fcfdf8;
+}
+
+.dashboard-activity-item .badge {
+    font-weight: 600;
+}
+
+.dashboard-status-menunggu {
+    background: #fff3cd;
+    color: #8a6d1d;
+}
+
+.dashboard-status-revisi {
+    background: #ffe0e6;
+    color: #8f2444;
+}
+
+.dashboard-status-disetujui {
+    background: #d9f5df;
+    color: #1f6b36;
+}
+
+.dashboard-status-ditolak {
+    background: #f8d7da;
+    color: #7e1f2a;
+}
+
+.dashboard-status-draft {
+    background: #e2e3e5;
+    color: #4d5157;
+}
+
+.table thead th {
+    background-color: #f0f6e3;
+}
+
+.form-wrapper {
+    border: 1px solid rgba(23, 59, 47, 0.12);
+    background-color: #fff;
+    border-radius: 1rem;
+}
+
+.panel-body {
+    background: linear-gradient(180deg, #f4f8ef 0%, #eef4ea 100%);
+    height: 100vh;
+    overflow: hidden;
+}
+
+.panel-sidebar {
+    width: 280px;
+    min-width: 280px;
+    background: #ffffff;
+    border-right: 1px solid rgba(23, 59, 47, 0.12);
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 1030;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.panel-shell {
+    height: 100vh;
+    overflow: hidden;
+}
+
+.panel-main {
+    margin-left: 280px;
+    width: calc(100vw - 280px);
+    min-width: 0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.panel-brand {
+    color: var(--agri-dark);
+}
+
+.panel-role-badge {
+    border: 1px solid rgba(30, 123, 79, 0.2);
+    background: rgba(30, 123, 79, 0.08);
+    border-radius: 0.75rem;
+    padding: 0.75rem;
+}
+
+.panel-nav-link {
+    color: #304434;
+    border-radius: 0.65rem;
+    padding: 0.6rem 0.8rem;
+    border: 1px solid transparent;
+    font-weight: 500;
+}
+
+.panel-nav-link:hover {
+    background-color: #f4f8ef;
+    color: #1e7b4f;
+    border-color: rgba(30, 123, 79, 0.15);
+}
+
+.panel-nav-link.active {
+    background: linear-gradient(90deg, rgba(30, 123, 79, 0.16), rgba(142, 191, 63, 0.13));
+    color: #195f3d;
+    border-color: rgba(30, 123, 79, 0.2);
+}
+
+.panel-header {
+    backdrop-filter: blur(4px);
+    position: sticky;
+    top: 0;
+    z-index: 1020;
+    flex: 0 0 auto;
+}
+
+.panel-content-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    scrollbar-gutter: stable both-edges;
+}
+
+.panel-content-inner {
+    min-width: 0;
+}
+
+@media (max-width: 991.98px) {
+    .panel-main {
+        margin-left: 0;
+        width: 100vw;
+    }
+}
+
+.sig-map {
+    width: 100%;
+    min-height: 320px;
+    border: 1px solid rgba(23, 59, 47, 0.16);
+    border-radius: 0.75rem;
+    overflow: hidden;
+}
+
+.sig-map.sig-map-sm {
+    min-height: 260px;
+}
+
+.sig-map-div-icon {
+    background: transparent;
+    border: 0;
+}
+
+.sig-map-marker {
+    --sig-size: 28px;
+    --sig-icon-color: #14532d;
+    --sig-bg-color: #ffffff;
+    width: var(--sig-size);
+    height: var(--sig-size);
+    border-radius: 999px 999px 999px 2px;
+    background: var(--sig-bg-color);
+    color: var(--sig-icon-color);
+    border: 2px solid var(--sig-icon-color);
+    transform: rotate(-45deg);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 6px 16px rgba(19, 40, 26, 0.25);
+}
+
+.sig-map-marker span {
+    transform: rotate(45deg);
+    font-weight: 700;
+    line-height: 1;
+    font-size: calc(var(--sig-size) * 0.4);
+}
+
+.sig-map-marker-preview {
+    --sig-size: 28px;
+    --sig-icon-color: #14532d;
+    --sig-bg-color: #ffffff;
+    width: var(--sig-size);
+    height: var(--sig-size);
+    border-radius: 999px;
+    border: 2px solid var(--sig-icon-color);
+    background: var(--sig-bg-color);
+    color: var(--sig-icon-color);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+}
+
+.sig-modal-map {
+    width: 100%;
+    min-height: 260px;
+    border: 1px solid rgba(23, 59, 47, 0.15);
+    border-radius: 0.75rem;
+    margin-top: 0.75rem;
+}
+
+.dataTables_wrapper .dataTables_filter input,
+.dataTables_wrapper .dataTables_length select {
+    border: 1px solid #ced4da;
+    border-radius: 0.375rem;
+    padding: 0.25rem 0.5rem;
+}
+
+.dataTables_wrapper .dataTables_paginate .paginate_button {
+    padding: 0.2rem 0.55rem !important;
+    border-radius: 0.35rem !important;
+}
