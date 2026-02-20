@@ -1,66 +1,148 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# GIS Komoditi Pertanian
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Panduan ini menjelaskan langkah dari **mengambil project dari GitHub ke local** sampai **aplikasi berhasil dijalankan**.
 
-## About Laravel
+Repository:
+`https://github.com/arieldcc/gis-komoditi-pertanian.git`
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## 1. Prasyarat
+Pastikan di komputer sudah terpasang:
+- Git
+- PHP 8.2+
+- Composer
+- Node.js 18+ dan npm
+- MySQL/MariaDB
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## 2. Clone Project dari GitHub
+Jalankan di terminal:
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+```bash
+git clone https://github.com/arieldcc/gis-komoditi-pertanian.git
+cd gis-komoditi-pertanian
+```
 
-## Learning Laravel
+## 3. Install Dependency Backend (Laravel)
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+```bash
+composer install
+```
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+## 4. Install Dependency Frontend
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+```bash
+npm install
+```
 
-## Laravel Sponsors
+## 5. Siapkan File Environment
+Salin file contoh environment:
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+```bash
+cp .env.example .env
+```
 
-### Premium Partners
+## 6. Konfigurasi Database di `.env`
+Buka file `.env`, lalu sesuaikan bagian ini:
 
-- **[Vehikl](https://vehikl.com/)**
-- **[Tighten Co.](https://tighten.co)**
-- **[WebReinvent](https://webreinvent.com/)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel/)**
-- **[Cyber-Duck](https://cyber-duck.co.uk)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Jump24](https://jump24.co.uk)**
-- **[Redberry](https://redberry.international/laravel/)**
-- **[Active Logic](https://activelogic.com)**
-- **[byte5](https://byte5.de)**
-- **[OP.GG](https://op.gg)**
+```env
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=sig_komoditas_pertanian
+DB_USERNAME=root
+DB_PASSWORD=
+```
 
-## Contributing
+## 7. Buat Database di MySQL
+Masuk ke MySQL lalu jalankan:
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+```sql
+CREATE DATABASE sig_komoditas_pertanian;
+```
 
-## Code of Conduct
+## 8. Generate APP Key + Link Storage
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+```bash
+php artisan key:generate
+php artisan storage:link
+```
 
-## Security Vulnerabilities
+## 9. Jalankan Migrasi dan Seeder
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+Untuk instalasi pertama (database baru), jalankan:
 
-## License
+```bash
+php artisan migrate
+php artisan db:seed
+```
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+Seeder akan membuat data awal termasuk akun default.
+
+## 10. Build Asset Frontend
+Pilih salah satu:
+
+Mode development (disarankan saat coding):
+```bash
+npm run dev
+```
+
+Mode production build:
+```bash
+npm run build
+```
+
+## 11. Jalankan Aplikasi
+Di terminal lain jalankan:
+
+```bash
+php artisan serve
+```
+
+Buka browser:
+`http://127.0.0.1:8000`
+
+## 12. Akun Login Default
+Hasil dari seeder:
+
+- Admin Dinas
+  - Email: `admin@sigkomoditas.id`
+  - Password: `Admin12345!`
+- Admin Kecamatan
+  - Email: `admin.kecamatan@sigkomoditas.id`
+  - Password: `password123`
+- Penyuluh
+  - Email: `penyuluh@sigkomoditas.id`
+  - Password: `password123`
+- Pimpinan Dinas
+  - Email: `pimpinan@sigkomoditas.id`
+  - Password: `password123`
+
+## 13. Menjalankan Semua Service Sekaligus (Opsional)
+Jika ingin sekaligus server + queue + log + vite:
+
+```bash
+composer run dev
+```
+
+## 14. Troubleshooting Singkat
+
+### A. `Class ... not found` atau autoload error
+```bash
+composer dump-autoload
+```
+
+### B. Perubahan frontend tidak muncul
+- Pastikan `npm run dev` sedang berjalan, atau jalankan ulang `npm run build`.
+
+### C. Gagal koneksi database
+- Cek nilai `DB_*` di `.env`.
+- Pastikan service MySQL aktif.
+- Pastikan nama database sudah dibuat.
+
+### D. File upload/foto tidak tampil
+```bash
+php artisan storage:link
+```
+
+## 15. Catatan Penting
+- Jangan commit file `.env` ke GitHub.
+- Jika sudah ada data manual di database, **jangan** gunakan `migrate:fresh` karena akan menghapus semua data.
