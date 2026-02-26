@@ -17,7 +17,7 @@
     class="panel-body"
     data-flash-success="{{ session('success') }}"
     data-flash-error="{{ session('error') }}"
-    data-flash-validation-errors="{{ e(json_encode($errors->all(), JSON_UNESCAPED_UNICODE)) }}"
+    data-flash-validation-errors='@json($errors->all(), JSON_UNESCAPED_UNICODE)'
 >
 <div class="panel-shell">
     <aside class="panel-sidebar d-none d-lg-flex flex-column p-3">

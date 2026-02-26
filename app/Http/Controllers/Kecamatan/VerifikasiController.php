@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Kecamatan;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -10,6 +11,19 @@ use Illuminate\View\View;
 
 class VerifikasiController extends Controller
 {
+    private function actionResponse(Request $request, bool $success, string $message, int $errorStatus = 422): RedirectResponse|JsonResponse
+    {
+        if ($request->expectsJson()) {
+            if ($success) {
+                return response()->json(['message' => $message]);
+            }
+
+            return response()->json(['message' => $message], $errorStatus);
+        }
+
+        return back()->with($success ? 'success' : 'error', $message);
+    }
+
     private function managedKecamatanIds(): array
     {
         return DB::table('user_wilayah')
@@ -55,13 +69,28 @@ class VerifikasiController extends Controller
         return view('kecamatan.verifikasi.index', compact('kunjungan', 'status', 'pendingUsulanCount'));
     }
 
-    public function update(Request $request, int $kunjunganId): RedirectResponse
+    public function update(Request $request, int $kunjunganId): RedirectResponse|JsonResponse
     {
+        $kecamatanIds = $this->managedKecamatanIds();
+
+        $target = DB::table('kunjungan_monitoring')
+            ->join('penugasan_penyuluh', 'penugasan_penyuluh.id', '=', 'kunjungan_monitoring.penugasan_id')
+            ->join('lahan', 'lahan.id', '=', 'penugasan_penyuluh.lahan_id')
+            ->join('desa', 'desa.id', '=', 'lahan.desa_id')
+            ->whereIn('desa.kecamatan_id', $kecamatanIds)
+            ->where('kunjungan_monitoring.id', $kunjunganId)
+            ->select('kunjungan_monitoring.id')
+            ->first();
+
+        if (! $target) {
+            return $this->actionResponse($request, false, 'Laporan kunjungan tidak ditemukan di wilayah Anda.', 404);
+        }
+
         $data = $request->validate([
-            'status_verifikasi' => ['required', 'in:revisi,disetujui'],
-            'catatan_verifikasi' => ['nullable', 'string', 'required_if:status_verifikasi,revisi'],
+            'status_verifikasi' => ['required', 'in:revisi,disetujui,ditolak'],
+            'catatan_verifikasi' => ['nullable', 'string', 'required_if:status_verifikasi,revisi,ditolak'],
         ], [
-            'catatan_verifikasi.required_if' => 'Keterangan revisi wajib diisi saat memilih respon Revisi.',
+            'catatan_verifikasi.required_if' => 'Keterangan wajib diisi saat memilih respon Revisi atau Tolak.',
         ]);
 
         DB::table('kunjungan_monitoring')->where('id', $kunjunganId)->update([
@@ -79,7 +108,29 @@ class VerifikasiController extends Controller
             'updated_at' => now(),
         ]);
 
-        return back()->with('success', 'Verifikasi laporan berhasil diperbarui.');
+        return $this->actionResponse($request, true, 'Verifikasi laporan berhasil diperbarui.');
+    }
+
+    public function destroy(Request $request, int $kunjunganId): RedirectResponse|JsonResponse
+    {
+        $kecamatanIds = $this->managedKecamatanIds();
+
+        $target = DB::table('kunjungan_monitoring')
+            ->join('penugasan_penyuluh', 'penugasan_penyuluh.id', '=', 'kunjungan_monitoring.penugasan_id')
+            ->join('lahan', 'lahan.id', '=', 'penugasan_penyuluh.lahan_id')
+            ->join('desa', 'desa.id', '=', 'lahan.desa_id')
+            ->whereIn('desa.kecamatan_id', $kecamatanIds)
+            ->where('kunjungan_monitoring.id', $kunjunganId)
+            ->select('kunjungan_monitoring.id')
+            ->first();
+
+        if (! $target) {
+            return $this->actionResponse($request, false, 'Laporan kunjungan tidak ditemukan di wilayah Anda.', 404);
+        }
+
+        DB::table('kunjungan_monitoring')->where('id', $kunjunganId)->delete();
+
+        return $this->actionResponse($request, true, 'Laporan kunjungan berhasil dihapus oleh admin kecamatan.');
     }
 
     public function updateUsulan(Request $request, int $id): RedirectResponse

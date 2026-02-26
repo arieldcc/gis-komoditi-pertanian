@@ -125,6 +125,7 @@ Route::middleware('auth')->group(function () {
 
         Route::get('/verifikasi', [VerifikasiController::class, 'index'])->name('verifikasi');
         Route::post('/verifikasi/{kunjunganId}', [VerifikasiController::class, 'update'])->name('verifikasi.update');
+        Route::delete('/verifikasi/{kunjunganId}', [VerifikasiController::class, 'destroy'])->name('verifikasi.destroy');
         Route::post('/verifikasi/usulan/{id}', [VerifikasiController::class, 'updateUsulan'])->name('verifikasi.usulan.update');
 
         Route::get('/rekap', [RekapController::class, 'index'])->name('rekap');

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\MapStyleSupport;
 use Illuminate\Database\QueryException;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -16,6 +17,19 @@ use Illuminate\View\View;
 
 class BalaiPenyuluhController extends Controller
 {
+    private function deletePenyuluhResponse(Request $request, bool $success, string $message, int $errorStatus = 422): RedirectResponse|JsonResponse
+    {
+        if ($request->expectsJson()) {
+            if ($success) {
+                return response()->json(['message' => $message]);
+            }
+
+            return response()->json(['message' => $message], $errorStatus);
+        }
+
+        return back()->with($success ? 'success' : 'error', $message);
+    }
+
     private function adminKecamatanByKecamatan(int $kecamatanId, ?int $exceptUserId = null): ?object
     {
         return DB::table('user_wilayah')
@@ -443,15 +457,31 @@ class BalaiPenyuluhController extends Controller
         return back()->with('success', 'Data penyuluh berhasil diperbarui.');
     }
 
-    public function destroyPenyuluh(int $id): RedirectResponse
+    public function destroyPenyuluh(Request $request, int $id): RedirectResponse|JsonResponse
     {
-        $existing = DB::table('penyuluh')->where('id', $id)->first(['foto_penyuluh_url']);
+        $existing = DB::table('penyuluh')->where('id', $id)->first(['id', 'foto_penyuluh_url']);
         if (! $existing) {
-            return back()->with('error', 'Data penyuluh tidak ditemukan.');
+            return $this->deletePenyuluhResponse($request, false, 'Data penyuluh tidak ditemukan.', 404);
+        }
+
+        $hasKunjungan = DB::table('penugasan_penyuluh as penugasan')
+            ->join('kunjungan_monitoring as kunjungan', 'kunjungan.penugasan_id', '=', 'penugasan.id')
+            ->where('penugasan.penyuluh_id', $id)
+            ->exists();
+
+        if ($hasKunjungan) {
+            return $this->deletePenyuluhResponse(
+                $request,
+                false,
+                'Data penyuluh tidak dapat dihapus karena sudah memiliki data kunjungan. Hapus data kunjungan terlebih dahulu.'
+            );
         }
 
         try {
-            DB::table('penyuluh')->where('id', $id)->delete();
+            DB::transaction(function () use ($id): void {
+                DB::table('penugasan_penyuluh')->where('penyuluh_id', $id)->delete();
+                DB::table('penyuluh')->where('id', $id)->delete();
+            });
 
             if (is_string($existing->foto_penyuluh_url) && str_starts_with($existing->foto_penyuluh_url, '/storage/')) {
                 $oldPath = str_replace('/storage/', '', $existing->foto_penyuluh_url);
@@ -460,9 +490,9 @@ class BalaiPenyuluhController extends Controller
                 }
             }
         } catch (QueryException) {
-            return back()->with('error', 'Data penyuluh tidak dapat dihapus karena masih dipakai penugasan.');
+            return $this->deletePenyuluhResponse($request, false, 'Data penyuluh tidak dapat dihapus karena masih dipakai data lain.');
         }
 
-        return back()->with('success', 'Data penyuluh berhasil dihapus.');
+        return $this->deletePenyuluhResponse($request, true, 'Data penyuluh berhasil dihapus.');
     }
 }

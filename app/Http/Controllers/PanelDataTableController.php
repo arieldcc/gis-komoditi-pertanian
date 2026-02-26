@@ -1194,24 +1194,10 @@ class PanelDataTableController extends Controller
                             'url' => route('penyuluh.kunjungan.update', $row->id),
                             'method' => 'PUT',
                             'fields' => [
-                                ['name' => 'tanggal_kunjungan', 'label' => 'Tanggal Kunjungan', 'type' => 'datetime-local', 'value' => $this->toDatetimeLocal($row->tanggal_kunjungan), 'required' => true],
                                 ['name' => 'kondisi_tanaman', 'label' => 'Kondisi Tanaman', 'type' => 'textarea', 'value' => $row->kondisi_tanaman, 'required' => false],
                                 ['name' => 'catatan_umum', 'label' => 'Catatan Umum', 'type' => 'textarea', 'value' => $row->catatan_umum, 'required' => false],
                                 ['name' => 'rekomendasi', 'label' => 'Rekomendasi', 'type' => 'textarea', 'value' => $row->rekomendasi, 'required' => false],
-                                [
-                                    'name' => 'status_verifikasi',
-                                    'label' => 'Status Verifikasi',
-                                    'type' => 'select',
-                                    'value' => $row->status_verifikasi,
-                                    'required' => true,
-                                    'options' => collect(['draft', 'menunggu', 'revisi'])->map(fn ($x): array => ['value' => $x, 'label' => ucfirst($x)])->toArray(),
-                                ],
                             ],
-                        ],
-                        'delete' => [
-                            'url' => route('penyuluh.kunjungan.destroy', $row->id),
-                            'method' => 'DELETE',
-                            'label' => 'Hapus data kunjungan ini?',
                         ],
                     ])),
                 ];
@@ -1535,7 +1521,7 @@ class PanelDataTableController extends Controller
             ['users.name', 'petani.nama_petani', 'kecamatan.nama_kecamatan', 'kunjungan_monitoring.status_verifikasi'],
             'kunjungan_monitoring.tanggal_kunjungan',
             function ($row): array {
-                $statusValue = in_array((string) $row->status_verifikasi, ['revisi', 'disetujui'], true)
+                $statusValue = in_array((string) $row->status_verifikasi, ['revisi', 'disetujui', 'ditolak'], true)
                     ? (string) $row->status_verifikasi
                     : 'disetujui';
 
@@ -1582,6 +1568,7 @@ class PanelDataTableController extends Controller
                                     'options' => [
                                         ['value' => 'disetujui', 'label' => 'Diterima'],
                                         ['value' => 'revisi', 'label' => 'Revisi'],
+                                        ['value' => 'ditolak', 'label' => 'Tolak'],
                                     ],
                                 ],
                                 ['name' => 'catatan_verifikasi', 'label' => 'Keterangan Revisi / Catatan', 'type' => 'textarea', 'value' => $row->catatan_verifikasi_terakhir, 'required' => false],
@@ -1600,10 +1587,16 @@ class PanelDataTableController extends Controller
                                     'options' => [
                                         ['value' => 'disetujui', 'label' => 'Diterima'],
                                         ['value' => 'revisi', 'label' => 'Revisi'],
+                                        ['value' => 'ditolak', 'label' => 'Tolak'],
                                     ],
                                 ],
                                 ['name' => 'catatan_verifikasi', 'label' => 'Keterangan Revisi / Catatan', 'type' => 'textarea', 'value' => $row->catatan_verifikasi_terakhir, 'required' => false],
                             ],
+                        ],
+                        'delete' => [
+                            'url' => route('kecamatan.verifikasi.destroy', $row->id),
+                            'method' => 'DELETE',
+                            'label' => 'Hapus laporan kunjungan ini?',
                         ],
                     ])),
                 ];
@@ -2131,6 +2124,10 @@ class PanelDataTableController extends Controller
             return $this->empty($request);
         }
 
+        $periodeOptions = $this->periodeOptions();
+        $kategoriKendalaOptions = $this->kategoriKendalaOptions();
+        $kategoriKebutuhanOptions = $this->kategoriKebutuhanOptions();
+
         $query = DB::table('kunjungan_monitoring')
             ->join('penugasan_penyuluh', 'penugasan_penyuluh.id', '=', 'kunjungan_monitoring.penugasan_id')
             ->join('lahan', 'lahan.id', '=', 'penugasan_penyuluh.lahan_id')
@@ -2139,14 +2136,59 @@ class PanelDataTableController extends Controller
                 $join->on('verifikasi_log.kunjungan_id', '=', 'kunjungan_monitoring.id')
                     ->whereRaw('verifikasi_log.id = (SELECT MAX(v2.id) FROM verifikasi_log v2 WHERE v2.kunjungan_id = kunjungan_monitoring.id)');
             })
+            ->leftJoin('produksi_panen as produksi', function ($join): void {
+                $join->on('produksi.kunjungan_id', '=', 'kunjungan_monitoring.id')
+                    ->whereRaw('produksi.id = (SELECT MAX(p2.id) FROM produksi_panen p2 WHERE p2.kunjungan_id = kunjungan_monitoring.id)');
+            })
+            ->leftJoin('kendala_kunjungan as kendala', function ($join): void {
+                $join->on('kendala.kunjungan_id', '=', 'kunjungan_monitoring.id')
+                    ->whereRaw('kendala.id = (SELECT MAX(k2.id) FROM kendala_kunjungan k2 WHERE k2.kunjungan_id = kunjungan_monitoring.id)');
+            })
+            ->leftJoin('kebutuhan_kunjungan as kebutuhan', function ($join): void {
+                $join->on('kebutuhan.kunjungan_id', '=', 'kunjungan_monitoring.id')
+                    ->whereRaw('kebutuhan.id = (SELECT MAX(b2.id) FROM kebutuhan_kunjungan b2 WHERE b2.kunjungan_id = kunjungan_monitoring.id)');
+            })
+            ->leftJoin('lampiran_media as foto_kunjungan', function ($join): void {
+                $join->on('foto_kunjungan.kunjungan_id', '=', 'kunjungan_monitoring.id')
+                    ->where('foto_kunjungan.file_type', '=', 'image')
+                    ->whereRaw("foto_kunjungan.id = (SELECT MAX(fu.id) FROM lampiran_media fu WHERE fu.kunjungan_id = kunjungan_monitoring.id AND fu.file_url LIKE '%/kunjungan/utama/%')");
+            })
+            ->leftJoin('lampiran_media as foto_kendala', function ($join): void {
+                $join->on('foto_kendala.kunjungan_id', '=', 'kunjungan_monitoring.id')
+                    ->where('foto_kendala.file_type', '=', 'image')
+                    ->whereRaw("foto_kendala.id = (SELECT MAX(fk.id) FROM lampiran_media fk WHERE fk.kunjungan_id = kunjungan_monitoring.id AND fk.file_url LIKE '%/kunjungan/kendala/%')");
+            })
             ->where('penugasan_penyuluh.penyuluh_id', $penyuluhId)
             ->select(
                 'kunjungan_monitoring.id',
+                'kunjungan_monitoring.penugasan_id',
                 'kunjungan_monitoring.tanggal_kunjungan',
                 'kunjungan_monitoring.status_verifikasi',
+                'kunjungan_monitoring.kondisi_tanaman',
+                'kunjungan_monitoring.catatan_umum',
+                'kunjungan_monitoring.rekomendasi',
+                'lahan.id as lahan_id',
+                'produksi.lahan_komoditas_id as produksi_lahan_komoditas_id',
+                'produksi.periode_id as produksi_periode_id',
+                'produksi.tanggal_panen as produksi_tanggal_panen',
+                'produksi.jumlah_produksi as produksi_jumlah_produksi',
+                'produksi.produktivitas_kg_ha as produksi_produktivitas_kg_ha',
+                'produksi.harga_jual as produksi_harga_jual',
+                'produksi.catatan as produksi_catatan',
+                'kendala.kategori_kendala_id as kendala_kategori_id',
+                'kendala.deskripsi_kendala',
+                'kendala.tingkat_keparahan',
+                'kendala.perlu_tindak_lanjut',
+                'kebutuhan.kategori_kebutuhan_id as kebutuhan_kategori_id',
+                'kebutuhan.deskripsi_kebutuhan',
+                'kebutuhan.jumlah as kebutuhan_jumlah',
+                'kebutuhan.satuan as kebutuhan_satuan',
+                'kebutuhan.prioritas as kebutuhan_prioritas',
                 'petani.nama_petani',
                 'verifikasi_log.catatan_verifikasi',
-                'verifikasi_log.diverifikasi_at'
+                'verifikasi_log.diverifikasi_at',
+                'foto_kunjungan.file_url as foto_kunjungan_url',
+                'foto_kendala.file_url as foto_kendala_url'
             );
 
         return $this->respond(
@@ -2155,7 +2197,113 @@ class PanelDataTableController extends Controller
             ['kunjungan_monitoring.tanggal_kunjungan', 'petani.nama_petani', 'kunjungan_monitoring.status_verifikasi', 'verifikasi_log.catatan_verifikasi', 'verifikasi_log.diverifikasi_at'],
             ['petani.nama_petani', 'kunjungan_monitoring.status_verifikasi', 'verifikasi_log.catatan_verifikasi'],
             'kunjungan_monitoring.tanggal_kunjungan',
-            function ($row): array {
+            function ($row) use ($periodeOptions, $kategoriKendalaOptions, $kategoriKebutuhanOptions): array {
+                $lahanKomoditasOptions = $this->lahanKomoditasOptionsByLahan((int) $row->lahan_id);
+                $isRevisi = (string) $row->status_verifikasi === 'revisi';
+                $editConfig = $isRevisi ? [
+                    'url' => route('penyuluh.kunjungan.update', $row->id),
+                    'method' => 'PUT',
+                    'fields' => [
+                        ['name' => 'kondisi_tanaman', 'label' => 'Kondisi Tanaman (Perbaikan)', 'type' => 'textarea', 'value' => $row->kondisi_tanaman, 'required' => false],
+                        ['name' => 'catatan_umum', 'label' => 'Catatan Umum (Perbaikan)', 'type' => 'textarea', 'value' => $row->catatan_umum, 'required' => false],
+                        ['name' => 'rekomendasi', 'label' => 'Rekomendasi (Perbaikan)', 'type' => 'textarea', 'value' => $row->rekomendasi, 'required' => false],
+                        ['name' => 'foto_kunjungan', 'label' => 'Foto Kunjungan (Opsional Ganti)', 'type' => 'file', 'required' => false],
+                        [
+                            'name' => 'produksi_lahan_komoditas_id',
+                            'label' => 'Komoditas Produksi',
+                            'type' => 'select',
+                            'value' => (string) ($row->produksi_lahan_komoditas_id ?? ''),
+                            'required' => false,
+                            'options' => array_merge(
+                                [['value' => '', 'label' => 'Tidak diisi']],
+                                $lahanKomoditasOptions
+                            ),
+                        ],
+                        [
+                            'name' => 'produksi_periode_id',
+                            'label' => 'Periode Produksi',
+                            'type' => 'select',
+                            'value' => (string) ($row->produksi_periode_id ?? ''),
+                            'required' => false,
+                            'options' => array_merge(
+                                [['value' => '', 'label' => 'Default Periode Aktif']],
+                                $periodeOptions
+                            ),
+                        ],
+                        ['name' => 'produksi_tanggal_panen', 'label' => 'Tanggal Panen', 'type' => 'date', 'value' => $row->produksi_tanggal_panen, 'required' => false],
+                        ['name' => 'produksi_jumlah_produksi', 'label' => 'Jumlah Produksi', 'type' => 'number', 'value' => $row->produksi_jumlah_produksi, 'required' => false, 'step' => '0.01'],
+                        ['name' => 'produksi_produktivitas_kg_ha', 'label' => 'Produktivitas (kg/ha)', 'type' => 'number', 'value' => $row->produksi_produktivitas_kg_ha, 'required' => false, 'step' => '0.01'],
+                        ['name' => 'produksi_harga_jual', 'label' => 'Harga Jual', 'type' => 'number', 'value' => $row->produksi_harga_jual, 'required' => false, 'step' => '0.01'],
+                        ['name' => 'produksi_catatan', 'label' => 'Catatan Produksi', 'type' => 'textarea', 'value' => $row->produksi_catatan, 'required' => false],
+                        [
+                            'name' => 'kendala_kategori_id',
+                            'label' => 'Kategori Kendala',
+                            'type' => 'select',
+                            'value' => (string) ($row->kendala_kategori_id ?? ''),
+                            'required' => false,
+                            'options' => array_merge(
+                                [['value' => '', 'label' => 'Tidak diisi']],
+                                $kategoriKendalaOptions
+                            ),
+                        ],
+                        ['name' => 'kendala_deskripsi', 'label' => 'Deskripsi Kendala', 'type' => 'textarea', 'value' => $row->deskripsi_kendala, 'required' => false],
+                        [
+                            'name' => 'kendala_tingkat_keparahan',
+                            'label' => 'Tingkat Keparahan',
+                            'type' => 'select',
+                            'value' => (string) ($row->tingkat_keparahan ?? ''),
+                            'required' => false,
+                            'options' => [
+                                ['value' => '', 'label' => 'Tidak diisi'],
+                                ['value' => 'rendah', 'label' => 'Rendah'],
+                                ['value' => 'sedang', 'label' => 'Sedang'],
+                                ['value' => 'tinggi', 'label' => 'Tinggi'],
+                                ['value' => 'kritis', 'label' => 'Kritis'],
+                            ],
+                        ],
+                        [
+                            'name' => 'kendala_perlu_tindak_lanjut',
+                            'label' => 'Perlu Tindak Lanjut',
+                            'type' => 'select',
+                            'value' => is_null($row->perlu_tindak_lanjut) ? '' : ((bool) $row->perlu_tindak_lanjut ? '1' : '0'),
+                            'required' => false,
+                            'options' => [
+                                ['value' => '', 'label' => 'Tidak diisi'],
+                                ['value' => '1', 'label' => 'Ya'],
+                                ['value' => '0', 'label' => 'Tidak'],
+                            ],
+                        ],
+                        ['name' => 'foto_kendala', 'label' => 'Foto Kendala (Opsional Ganti)', 'type' => 'file', 'required' => false],
+                        [
+                            'name' => 'kebutuhan_kategori_id',
+                            'label' => 'Kategori Kebutuhan',
+                            'type' => 'select',
+                            'value' => (string) ($row->kebutuhan_kategori_id ?? ''),
+                            'required' => false,
+                            'options' => array_merge(
+                                [['value' => '', 'label' => 'Tidak diisi']],
+                                $kategoriKebutuhanOptions
+                            ),
+                        ],
+                        ['name' => 'kebutuhan_deskripsi', 'label' => 'Deskripsi Kebutuhan', 'type' => 'textarea', 'value' => $row->deskripsi_kebutuhan, 'required' => false],
+                        ['name' => 'kebutuhan_jumlah', 'label' => 'Jumlah Kebutuhan', 'type' => 'number', 'value' => $row->kebutuhan_jumlah, 'required' => false, 'step' => '0.01'],
+                        ['name' => 'kebutuhan_satuan', 'label' => 'Satuan Kebutuhan', 'type' => 'text', 'value' => $row->kebutuhan_satuan, 'required' => false],
+                        [
+                            'name' => 'kebutuhan_prioritas',
+                            'label' => 'Prioritas Kebutuhan',
+                            'type' => 'select',
+                            'value' => (string) ($row->kebutuhan_prioritas ?? ''),
+                            'required' => false,
+                            'options' => [
+                                ['value' => '', 'label' => 'Tidak diisi'],
+                                ['value' => 'rendah', 'label' => 'Rendah'],
+                                ['value' => 'sedang', 'label' => 'Sedang'],
+                                ['value' => 'tinggi', 'label' => 'Tinggi'],
+                            ],
+                        ],
+                    ],
+                ] : null;
+
                 return [
                     'tanggal_kunjungan' => (string) $row->tanggal_kunjungan,
                     'nama_petani' => e($row->nama_petani),
@@ -2170,7 +2318,15 @@ class PanelDataTableController extends Controller
                             ['label' => 'Status', 'value' => $row->status_verifikasi],
                             ['label' => 'Catatan Verifikasi', 'value' => $row->catatan_verifikasi],
                             ['label' => 'Waktu Verifikasi', 'value' => $row->diverifikasi_at],
+                            ['label' => 'Produksi', 'value' => $row->produksi_jumlah_produksi ?: '-'],
+                            ['label' => 'Kendala', 'value' => $row->deskripsi_kendala ?: '-'],
+                            ['label' => 'Kebutuhan', 'value' => $row->deskripsi_kebutuhan ?: '-'],
+                            ['label' => 'Kondisi Tanaman', 'value' => $row->kondisi_tanaman],
+                            ['label' => 'Catatan Umum', 'value' => $row->catatan_umum],
+                            ['label' => 'Rekomendasi', 'value' => $row->rekomendasi],
                         ],
+                        'image_url' => $row->foto_kunjungan_url ?: $row->foto_kendala_url,
+                        'edit' => $editConfig,
                     ])),
                 ];
             }
@@ -2508,13 +2664,31 @@ class PanelDataTableController extends Controller
     private function actionsHtml(string $payload): string
     {
         $escaped = e($payload);
+        $decodedPayload = json_decode((string) base64_decode($payload, true), true);
+
+        $hasView = is_array($decodedPayload);
+        $editConfig = is_array($decodedPayload) && is_array($decodedPayload['edit'] ?? null) ? $decodedPayload['edit'] : null;
+        $deleteConfig = is_array($decodedPayload) && is_array($decodedPayload['delete'] ?? null) ? $decodedPayload['delete'] : null;
+
+        $hasEdit = is_array($editConfig)
+            && ! empty($editConfig['url'])
+            && is_array($editConfig['fields'] ?? null)
+            && count($editConfig['fields']) > 0;
+        $hasDelete = is_array($deleteConfig) && ! empty($deleteConfig['url']);
+
+        $buttons = '';
+        if ($hasView) {
+            $buttons .= '<button type="button" class="btn btn-outline-info btn-sm js-row-view" data-row="'.$escaped.'">View</button>';
+        }
+        if ($hasEdit) {
+            $buttons .= '<button type="button" class="btn btn-outline-primary btn-sm js-row-edit" data-row="'.$escaped.'">Edit</button>';
+        }
+        if ($hasDelete) {
+            $buttons .= '<button type="button" class="btn btn-outline-danger btn-sm js-row-delete" data-row="'.$escaped.'">Delete</button>';
+        }
 
         return (string) new HtmlString(
-            '<div class="d-flex gap-1">'.
-            '<button type="button" class="btn btn-outline-info btn-sm js-row-view" data-row="'.$escaped.'">View</button>'.
-            '<button type="button" class="btn btn-outline-primary btn-sm js-row-edit" data-row="'.$escaped.'">Edit</button>'.
-            '<button type="button" class="btn btn-outline-danger btn-sm js-row-delete" data-row="'.$escaped.'">Delete</button>'.
-            '</div>'
+            '<div class="d-flex gap-1">'.$buttons.'</div>'
         );
     }
 
@@ -2555,6 +2729,62 @@ class PanelDataTableController extends Controller
             ->map(fn ($x): array => [
                 'value' => (string) $x->id,
                 'label' => $x->nama_petani.' - '.$x->tanggal_kunjungan,
+            ])
+            ->toArray();
+    }
+
+    private function lahanKomoditasOptionsByLahan(int $lahanId): array
+    {
+        if ($lahanId <= 0) {
+            return [];
+        }
+
+        return DB::table('lahan_komoditas')
+            ->join('komoditas', 'komoditas.id', '=', 'lahan_komoditas.komoditas_id')
+            ->where('lahan_komoditas.lahan_id', $lahanId)
+            ->orderBy('komoditas.nama_komoditas')
+            ->select('lahan_komoditas.id', 'komoditas.nama_komoditas', 'lahan_komoditas.tahun_tanam')
+            ->get()
+            ->map(fn ($row): array => [
+                'value' => (string) $row->id,
+                'label' => trim($row->nama_komoditas.' ('.$row->tahun_tanam.')'),
+            ])
+            ->toArray();
+    }
+
+    private function periodeOptions(): array
+    {
+        return DB::table('periode_laporan')
+            ->orderByDesc('tahun')
+            ->orderByDesc('bulan')
+            ->get(['id', 'bulan', 'tahun', 'status_periode'])
+            ->map(fn ($row): array => [
+                'value' => (string) $row->id,
+                'label' => sprintf('%02d/%d (%s)', (int) $row->bulan, (int) $row->tahun, ucfirst((string) $row->status_periode)),
+            ])
+            ->toArray();
+    }
+
+    private function kategoriKendalaOptions(): array
+    {
+        return DB::table('kategori_kendala')
+            ->orderBy('nama_kategori')
+            ->get(['id', 'nama_kategori'])
+            ->map(fn ($row): array => [
+                'value' => (string) $row->id,
+                'label' => (string) $row->nama_kategori,
+            ])
+            ->toArray();
+    }
+
+    private function kategoriKebutuhanOptions(): array
+    {
+        return DB::table('kategori_kebutuhan')
+            ->orderBy('nama_kategori')
+            ->get(['id', 'nama_kategori'])
+            ->map(fn ($row): array => [
+                'value' => (string) $row->id,
+                'label' => (string) $row->nama_kategori,
             ])
             ->toArray();
     }

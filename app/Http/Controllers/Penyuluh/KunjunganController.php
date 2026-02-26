@@ -13,6 +13,19 @@ use Illuminate\View\View;
 
 class KunjunganController extends Controller
 {
+    private function actionResponse(Request $request, bool $success, string $message, int $errorStatus = 422): RedirectResponse|JsonResponse
+    {
+        if ($request->expectsJson()) {
+            if ($success) {
+                return response()->json(['message' => $message]);
+            }
+
+            return response()->json(['message' => $message], $errorStatus);
+        }
+
+        return back()->with($success ? 'success' : 'error', $message);
+    }
+
     private function penyuluhId(): ?int
     {
         return DB::table('penyuluh')->where('user_id', auth()->id())->value('id');
@@ -534,61 +547,281 @@ class KunjunganController extends Controller
         return back()->with('success', 'Pengajuan perbaikan data lapangan berhasil dikirim.');
     }
 
-    public function update(Request $request, int $id): RedirectResponse
+    public function update(Request $request, int $id): RedirectResponse|JsonResponse
     {
         $penyuluhId = $this->penyuluhId();
         if (! $penyuluhId) {
-            return back()->with('error', 'Profil penyuluh tidak tersedia.');
+            return $this->actionResponse($request, false, 'Profil penyuluh tidak tersedia.', 403);
         }
 
         $target = DB::table('kunjungan_monitoring')
             ->join('penugasan_penyuluh', 'penugasan_penyuluh.id', '=', 'kunjungan_monitoring.penugasan_id')
             ->where('kunjungan_monitoring.id', $id)
             ->where('penugasan_penyuluh.penyuluh_id', $penyuluhId)
-            ->select('kunjungan_monitoring.id')
+            ->select(
+                'kunjungan_monitoring.id',
+                'kunjungan_monitoring.penugasan_id',
+                'kunjungan_monitoring.tanggal_kunjungan',
+                'penugasan_penyuluh.lahan_id'
+            )
             ->first();
 
         if (! $target) {
-            return back()->with('error', 'Kunjungan tidak ditemukan.');
+            return $this->actionResponse($request, false, 'Kunjungan tidak ditemukan.', 404);
         }
 
         $data = $request->validate([
-            'tanggal_kunjungan' => ['required', 'date'],
             'kondisi_tanaman' => ['nullable', 'string'],
             'catatan_umum' => ['nullable', 'string'],
             'rekomendasi' => ['nullable', 'string'],
-            'status_verifikasi' => ['required', 'in:draft,menunggu,revisi'],
+            'foto_kunjungan' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+
+            'produksi_lahan_komoditas_id' => ['nullable', 'exists:lahan_komoditas,id', 'required_with:produksi_jumlah_produksi,produksi_tanggal_panen,produksi_harga_jual,produksi_catatan'],
+            'produksi_periode_id' => ['nullable', 'exists:periode_laporan,id'],
+            'produksi_tanggal_panen' => ['nullable', 'date'],
+            'produksi_jumlah_produksi' => ['nullable', 'numeric', 'min:0', 'required_with:produksi_lahan_komoditas_id,produksi_tanggal_panen,produksi_harga_jual,produksi_catatan'],
+            'produksi_produktivitas_kg_ha' => ['nullable', 'numeric', 'min:0'],
+            'produksi_harga_jual' => ['nullable', 'numeric', 'min:0'],
+            'produksi_catatan' => ['nullable', 'string'],
+
+            'kendala_kategori_id' => ['nullable', 'exists:kategori_kendala,id', 'required_with:kendala_deskripsi,kendala_tingkat_keparahan,kendala_perlu_tindak_lanjut,foto_kendala'],
+            'kendala_deskripsi' => ['nullable', 'string', 'required_with:kendala_kategori_id,kendala_tingkat_keparahan,kendala_perlu_tindak_lanjut,foto_kendala'],
+            'kendala_tingkat_keparahan' => ['nullable', 'in:rendah,sedang,tinggi,kritis'],
+            'kendala_perlu_tindak_lanjut' => ['nullable', 'boolean'],
+            'foto_kendala' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120', 'required_with:kendala_kategori_id,kendala_deskripsi,kendala_tingkat_keparahan,kendala_perlu_tindak_lanjut'],
+
+            'kebutuhan_kategori_id' => ['nullable', 'exists:kategori_kebutuhan,id', 'required_with:kebutuhan_deskripsi,kebutuhan_jumlah,kebutuhan_satuan,kebutuhan_prioritas'],
+            'kebutuhan_deskripsi' => ['nullable', 'string', 'required_with:kebutuhan_kategori_id,kebutuhan_jumlah,kebutuhan_satuan,kebutuhan_prioritas'],
+            'kebutuhan_jumlah' => ['nullable', 'numeric', 'min:0'],
+            'kebutuhan_satuan' => ['nullable', 'string', 'max:30'],
+            'kebutuhan_prioritas' => ['nullable', 'in:rendah,sedang,tinggi'],
+        ], [
+            'foto_kunjungan.image' => 'Foto kunjungan harus berupa gambar.',
+            'foto_kunjungan.mimes' => 'Format foto kunjungan harus jpg, jpeg, png, atau webp.',
+            'foto_kunjungan.max' => 'Ukuran foto kunjungan maksimal 5MB.',
+            'foto_kendala.required_with' => 'Foto kendala wajib diupload saat Anda mengisi data kendala.',
+            'foto_kendala.image' => 'Foto kendala harus berupa gambar.',
+            'foto_kendala.mimes' => 'Format foto kendala harus jpg, jpeg, png, atau webp.',
+            'foto_kendala.max' => 'Ukuran foto kendala maksimal 5MB.',
+            'produksi_lahan_komoditas_id.required_with' => 'Pilih komoditas lahan untuk data produksi.',
+            'produksi_jumlah_produksi.required_with' => 'Jumlah produksi wajib diisi saat input produksi.',
+            'kendala_kategori_id.required_with' => 'Kategori kendala wajib diisi saat melaporkan kendala.',
+            'kendala_deskripsi.required_with' => 'Deskripsi kendala wajib diisi saat melaporkan kendala.',
+            'kebutuhan_kategori_id.required_with' => 'Kategori kebutuhan wajib diisi saat melaporkan kebutuhan.',
+            'kebutuhan_deskripsi.required_with' => 'Deskripsi kebutuhan wajib diisi saat melaporkan kebutuhan.',
         ]);
 
-        DB::table('kunjungan_monitoring')->where('id', $id)->update([
-            ...$data,
-            'updated_at' => now(),
-        ]);
+        $existingProduksi = DB::table('produksi_panen')
+            ->where('kunjungan_id', $id)
+            ->orderByDesc('id')
+            ->first(['id', 'periode_id', 'tanggal_panen']);
+        $existingKendala = DB::table('kendala_kunjungan')
+            ->where('kunjungan_id', $id)
+            ->orderByDesc('id')
+            ->first(['id', 'tingkat_keparahan', 'perlu_tindak_lanjut']);
+        $existingKebutuhan = DB::table('kebutuhan_kunjungan')
+            ->where('kunjungan_id', $id)
+            ->orderByDesc('id')
+            ->first(['id', 'prioritas']);
 
-        return back()->with('success', 'Kunjungan monitoring berhasil diperbarui.');
+        $hasProduksiInput =
+            $request->filled('produksi_lahan_komoditas_id')
+            || $request->filled('produksi_jumlah_produksi')
+            || $request->filled('produksi_tanggal_panen')
+            || $request->filled('produksi_harga_jual')
+            || $request->filled('produksi_catatan');
+
+        $produksiPeriodeId = null;
+        if ($hasProduksiInput) {
+            if (! $request->filled('produksi_lahan_komoditas_id') || ! $request->filled('produksi_jumlah_produksi')) {
+                return $this->actionResponse($request, false, 'Input produksi memerlukan komoditas lahan dan jumlah produksi.');
+            }
+
+            $validLahanKomoditas = DB::table('lahan_komoditas')
+                ->where('id', $data['produksi_lahan_komoditas_id'])
+                ->where('lahan_id', $target->lahan_id)
+                ->exists();
+            if (! $validLahanKomoditas) {
+                return $this->actionResponse($request, false, 'Komoditas lahan untuk produksi tidak valid.');
+            }
+
+            $produksiPeriodeId = (int) ($data['produksi_periode_id'] ?? ($existingProduksi?->periode_id ?? $this->defaultPeriodeId()));
+            if ($produksiPeriodeId <= 0) {
+                return $this->actionResponse($request, false, 'Periode laporan belum tersedia.');
+            }
+        }
+
+        $hasKendalaInput =
+            $request->filled('kendala_kategori_id')
+            || $request->filled('kendala_deskripsi')
+            || $request->filled('kendala_tingkat_keparahan')
+            || $request->filled('kendala_perlu_tindak_lanjut')
+            || $request->hasFile('foto_kendala');
+        if ($hasKendalaInput && (! $request->filled('kendala_kategori_id') || ! $request->filled('kendala_deskripsi'))) {
+            return $this->actionResponse($request, false, 'Input kendala memerlukan kategori dan deskripsi kendala.');
+        }
+
+        $hasKebutuhanInput =
+            $request->filled('kebutuhan_kategori_id')
+            || $request->filled('kebutuhan_deskripsi')
+            || $request->filled('kebutuhan_jumlah')
+            || $request->filled('kebutuhan_satuan')
+            || $request->filled('kebutuhan_prioritas');
+        if ($hasKebutuhanInput && (! $request->filled('kebutuhan_kategori_id') || ! $request->filled('kebutuhan_deskripsi'))) {
+            return $this->actionResponse($request, false, 'Input kebutuhan memerlukan kategori dan deskripsi kebutuhan.');
+        }
+
+        DB::transaction(function () use (
+            $request,
+            $data,
+            $id,
+            $target,
+            $hasProduksiInput,
+            $produksiPeriodeId,
+            $existingProduksi,
+            $hasKendalaInput,
+            $existingKendala,
+            $hasKebutuhanInput,
+            $existingKebutuhan
+        ): void {
+            DB::table('kunjungan_monitoring')->where('id', $id)->update([
+                'kondisi_tanaman' => $data['kondisi_tanaman'] ?? null,
+                'catatan_umum' => $data['catatan_umum'] ?? null,
+                'rekomendasi' => $data['rekomendasi'] ?? null,
+                'updated_at' => now(),
+            ]);
+
+            if ($request->hasFile('foto_kunjungan')) {
+                $this->upsertKunjunganImage($id, 'kunjungan/utama', 'kunjungan/utama', $request, 'foto_kunjungan', $target->tanggal_kunjungan);
+            }
+
+            if ($hasProduksiInput && $produksiPeriodeId) {
+                $tanggalPanen = $data['produksi_tanggal_panen']
+                    ?? ($existingProduksi?->tanggal_panen
+                        ? Carbon::parse((string) $existingProduksi->tanggal_panen)->toDateString()
+                        : Carbon::parse((string) $target->tanggal_kunjungan)->toDateString());
+
+                $produksiPayload = [
+                    'lahan_komoditas_id' => $data['produksi_lahan_komoditas_id'],
+                    'periode_id' => $produksiPeriodeId,
+                    'kunjungan_id' => $id,
+                    'tanggal_panen' => $tanggalPanen,
+                    'jumlah_produksi' => $data['produksi_jumlah_produksi'],
+                    'produktivitas_kg_ha' => $data['produksi_produktivitas_kg_ha'] ?? null,
+                    'harga_jual' => $data['produksi_harga_jual'] ?? null,
+                    'catatan' => $data['produksi_catatan'] ?? null,
+                    'updated_at' => now(),
+                ];
+
+                if ($existingProduksi) {
+                    DB::table('produksi_panen')->where('id', $existingProduksi->id)->update($produksiPayload);
+                } else {
+                    DB::table('produksi_panen')->insert([
+                        ...$produksiPayload,
+                        'created_at' => now(),
+                    ]);
+                }
+            }
+
+            if ($hasKendalaInput) {
+                $kendalaPayload = [
+                    'kunjungan_id' => $id,
+                    'kategori_kendala_id' => $data['kendala_kategori_id'],
+                    'deskripsi_kendala' => $data['kendala_deskripsi'],
+                    'tingkat_keparahan' => $data['kendala_tingkat_keparahan'] ?? ($existingKendala?->tingkat_keparahan ?? 'sedang'),
+                    'perlu_tindak_lanjut' => $request->filled('kendala_perlu_tindak_lanjut')
+                        ? (bool) $request->input('kendala_perlu_tindak_lanjut')
+                        : (bool) ($existingKendala?->perlu_tindak_lanjut ?? true),
+                    'updated_at' => now(),
+                ];
+
+                if ($existingKendala) {
+                    DB::table('kendala_kunjungan')->where('id', $existingKendala->id)->update($kendalaPayload);
+                } else {
+                    DB::table('kendala_kunjungan')->insert([
+                        ...$kendalaPayload,
+                        'created_at' => now(),
+                    ]);
+                }
+
+                if ($request->hasFile('foto_kendala')) {
+                    $this->upsertKunjunganImage($id, 'kunjungan/kendala', 'kunjungan/kendala', $request, 'foto_kendala', $target->tanggal_kunjungan);
+                }
+            }
+
+            if ($hasKebutuhanInput) {
+                $kebutuhanPayload = [
+                    'kunjungan_id' => $id,
+                    'kategori_kebutuhan_id' => $data['kebutuhan_kategori_id'],
+                    'deskripsi_kebutuhan' => $data['kebutuhan_deskripsi'],
+                    'jumlah' => $data['kebutuhan_jumlah'] ?? null,
+                    'satuan' => $data['kebutuhan_satuan'] ?? null,
+                    'prioritas' => $data['kebutuhan_prioritas'] ?? ($existingKebutuhan?->prioritas ?? 'sedang'),
+                    'updated_at' => now(),
+                ];
+
+                if ($existingKebutuhan) {
+                    DB::table('kebutuhan_kunjungan')->where('id', $existingKebutuhan->id)->update($kebutuhanPayload);
+                } else {
+                    DB::table('kebutuhan_kunjungan')->insert([
+                        ...$kebutuhanPayload,
+                        'created_at' => now(),
+                    ]);
+                }
+            }
+        });
+
+        return $this->actionResponse($request, true, 'Kunjungan monitoring berhasil diperbarui.');
     }
 
-    public function destroy(int $id): RedirectResponse
+    public function destroy(Request $request, int $id): RedirectResponse|JsonResponse
     {
-        $penyuluhId = $this->penyuluhId();
-        if (! $penyuluhId) {
-            return back()->with('error', 'Profil penyuluh tidak tersedia.');
+        return $this->actionResponse($request, false, 'Penyuluh tidak memiliki akses hapus laporan kunjungan. Hapus hanya dapat dilakukan admin kecamatan.', 403);
+    }
+
+    private function upsertKunjunganImage(int $kunjunganId, string $fileUrlSegment, string $storageDir, Request $request, string $fileField, string $takenAt): void
+    {
+        if (! $request->hasFile($fileField)) {
+            return;
         }
 
-        $target = DB::table('kunjungan_monitoring')
-            ->join('penugasan_penyuluh', 'penugasan_penyuluh.id', '=', 'kunjungan_monitoring.penugasan_id')
-            ->where('kunjungan_monitoring.id', $id)
-            ->where('penugasan_penyuluh.penyuluh_id', $penyuluhId)
-            ->select('kunjungan_monitoring.id')
-            ->first();
+        $existing = DB::table('lampiran_media')
+            ->where('kunjungan_id', $kunjunganId)
+            ->where('file_type', 'image')
+            ->where('file_url', 'like', '%/'.$fileUrlSegment.'/%')
+            ->orderByDesc('id')
+            ->first(['id', 'file_url']);
 
-        if (! $target) {
-            return back()->with('error', 'Kunjungan tidak ditemukan.');
+        $path = $request->file($fileField)->store($storageDir, 'public');
+        $fileUrl = Storage::url($path);
+
+        if ($existing) {
+            DB::table('lampiran_media')->where('id', $existing->id)->update([
+                'uploaded_by_user_id' => auth()->id(),
+                'file_url' => $fileUrl,
+                'taken_at' => $takenAt,
+                'uploaded_at' => now(),
+                'updated_at' => now(),
+            ]);
+        } else {
+            DB::table('lampiran_media')->insert([
+                'kunjungan_id' => $kunjunganId,
+                'uploaded_by_user_id' => auth()->id(),
+                'file_url' => $fileUrl,
+                'file_type' => 'image',
+                'taken_at' => $takenAt,
+                'uploaded_at' => now(),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
         }
 
-        DB::table('kunjungan_monitoring')->where('id', $id)->delete();
-
-        return back()->with('success', 'Kunjungan monitoring berhasil dihapus.');
+        if ($existing && is_string($existing->file_url) && str_starts_with($existing->file_url, '/storage/')) {
+            $oldPath = str_replace('/storage/', '', $existing->file_url);
+            if ($oldPath !== '' && Storage::disk('public')->exists($oldPath)) {
+                Storage::disk('public')->delete($oldPath);
+            }
+        }
     }
 
     private function defaultPeriodeId(): ?int
