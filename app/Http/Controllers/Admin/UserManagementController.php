@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -134,7 +135,33 @@ class UserManagementController extends Controller
                 ->with('error', 'Anda tidak dapat menghapus akun sendiri.');
         }
 
-        $user->delete();
+        $usageMap = [
+            'user_wilayah' => 'masih terhubung dengan data wilayah pengguna',
+            'penugasan_penyuluh' => 'masih tercatat sebagai pembuat penugasan penyuluh',
+            'verifikasi_log' => 'masih tercatat pada log verifikasi laporan',
+            'laporan_pimpinan' => 'masih tercatat sebagai pembuat laporan pimpinan',
+            'lampiran_media' => 'masih tercatat sebagai pengunggah media',
+            'usulan_perubahan_data' => 'masih tercatat sebagai pengaju usulan perubahan data',
+        ];
+
+        foreach ($usageMap as $table => $message) {
+            if (DB::table($table)->where($table === 'laporan_pimpinan' ? 'generated_by_user_id' : ($table === 'penugasan_penyuluh' ? 'dibuat_oleh_user_id' : ($table === 'verifikasi_log' ? 'diverifikasi_oleh_user_id' : ($table === 'lampiran_media' ? 'uploaded_by_user_id' : ($table === 'usulan_perubahan_data' ? 'diajukan_oleh_user_id' : 'user_id')))), $user->id)->exists()) {
+                return redirect()->route('admin.users.index')
+                    ->with('error', 'Pengguna tidak dapat dihapus karena '.$message.'.');
+            }
+        }
+
+        try {
+            $deleted = $user->delete();
+        } catch (QueryException) {
+            return redirect()->route('admin.users.index')
+                ->with('error', 'Pengguna tidak dapat dihapus karena masih digunakan data lain.');
+        }
+
+        if (! $deleted) {
+            return redirect()->route('admin.users.index')
+                ->with('error', 'Pengguna gagal dihapus karena masih digunakan data lain.');
+        }
 
         return redirect()->route('admin.users.index')
             ->with('success', 'Pengguna berhasil dihapus.');

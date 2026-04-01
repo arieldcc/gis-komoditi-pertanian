@@ -131,10 +131,31 @@ class WilayahController extends Controller
 
     public function destroyKecamatan(int $id): RedirectResponse
     {
+        $exists = DB::table('kecamatan')->where('id', $id)->exists();
+        if (! $exists) {
+            return back()->with('error', 'Kecamatan tidak ditemukan.');
+        }
+
+        if (DB::table('desa')->where('kecamatan_id', $id)->exists()) {
+            return back()->with('error', 'Kecamatan tidak dapat dihapus karena masih memiliki data desa.');
+        }
+
+        if (DB::table('balai_penyuluh')->where('kecamatan_id', $id)->exists()) {
+            return back()->with('error', 'Kecamatan tidak dapat dihapus karena masih memiliki data balai penyuluh.');
+        }
+
+        if (DB::table('user_wilayah')->where('kecamatan_id', $id)->exists()) {
+            return back()->with('error', 'Kecamatan tidak dapat dihapus karena masih terhubung dengan akun pengguna.');
+        }
+
         try {
-            DB::table('kecamatan')->where('id', $id)->delete();
+            $deleted = DB::table('kecamatan')->where('id', $id)->delete();
         } catch (QueryException) {
             return back()->with('error', 'Kecamatan tidak dapat dihapus karena masih digunakan tabel lain.');
+        }
+
+        if ($deleted < 1) {
+            return back()->with('error', 'Kecamatan gagal dihapus karena masih digunakan data lain.');
         }
 
         return back()->with('success', 'Kecamatan berhasil dihapus.');
@@ -250,10 +271,27 @@ class WilayahController extends Controller
 
     public function destroyDesa(int $id): RedirectResponse
     {
+        $exists = DB::table('desa')->where('id', $id)->exists();
+        if (! $exists) {
+            return back()->with('error', 'Desa tidak ditemukan.');
+        }
+
+        if (DB::table('petani')->where('desa_id', $id)->exists()) {
+            return back()->with('error', 'Desa tidak dapat dihapus karena masih memiliki data petani.');
+        }
+
+        if (DB::table('lahan')->where('desa_id', $id)->exists()) {
+            return back()->with('error', 'Desa tidak dapat dihapus karena masih memiliki data lahan.');
+        }
+
         try {
-            DB::table('desa')->where('id', $id)->delete();
+            $deleted = DB::table('desa')->where('id', $id)->delete();
         } catch (QueryException) {
             return back()->with('error', 'Desa tidak dapat dihapus karena masih digunakan tabel lain.');
+        }
+
+        if ($deleted < 1) {
+            return back()->with('error', 'Desa gagal dihapus karena masih digunakan data lain.');
         }
 
         return back()->with('success', 'Desa berhasil dihapus.');

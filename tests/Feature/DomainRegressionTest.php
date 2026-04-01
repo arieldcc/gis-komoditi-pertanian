@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use App\Support\AdminCascadeDeleteService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -55,6 +56,27 @@ class DomainRegressionTest extends TestCase
         ]);
         $kecamatanId = $this->createKecamatan();
         $balaiId = $this->createBalai($kecamatanId);
+        ['user' => $penyuluhUser, 'penyuluh_id' => $penyuluhId] = $this->createPenyuluhProfile($balaiId);
+
+        $response = $this->actingAs($admin)
+            ->from('/admin/balai')
+            ->delete(route('admin.balai.penyuluh.destroy', $penyuluhId));
+
+        $response->assertRedirect('/admin/balai');
+        $response->assertSessionHas('success');
+
+        $this->assertDatabaseMissing('penyuluh', ['id' => $penyuluhId]);
+        $this->assertDatabaseMissing('users', ['id' => $penyuluhUser->id]);
+    }
+
+    public function test_admin_cannot_delete_penyuluh_that_still_has_penugasan(): void
+    {
+        $admin = User::factory()->create([
+            'role' => User::ROLE_ADMIN_DINAS,
+            'is_active' => true,
+        ]);
+        $kecamatanId = $this->createKecamatan();
+        $balaiId = $this->createBalai($kecamatanId);
         $desaId = $this->createDesa($kecamatanId);
         $petaniId = $this->createPetani($desaId);
         $lahanId = $this->createLahan($petaniId, $desaId, 1.75);
@@ -66,11 +88,10 @@ class DomainRegressionTest extends TestCase
             ->delete(route('admin.balai.penyuluh.destroy', $penyuluhId));
 
         $response->assertRedirect('/admin/balai');
-        $response->assertSessionHas('success');
-
-        $this->assertDatabaseMissing('penugasan_penyuluh', ['id' => $penugasanId]);
-        $this->assertDatabaseMissing('penyuluh', ['id' => $penyuluhId]);
-        $this->assertDatabaseMissing('users', ['id' => $penyuluhUser->id]);
+        $response->assertSessionHas('error', 'Data penyuluh tidak dapat dihapus karena masih memiliki data penugasan.');
+        $this->assertDatabaseHas('penugasan_penyuluh', ['id' => $penugasanId]);
+        $this->assertDatabaseHas('penyuluh', ['id' => $penyuluhId]);
+        $this->assertDatabaseHas('users', ['id' => $penyuluhUser->id]);
     }
 
     public function test_admin_kecamatan_cannot_move_penyuluh_to_foreign_balai(): void
@@ -289,6 +310,280 @@ class DomainRegressionTest extends TestCase
         $pdfResponse->assertHeader('content-type', 'application/pdf');
     }
 
+    public function test_admin_cannot_delete_komoditas_that_is_still_used(): void
+    {
+        $admin = User::factory()->create([
+            'role' => User::ROLE_ADMIN_DINAS,
+            'is_active' => true,
+        ]);
+        $kecamatanId = $this->createKecamatan();
+        $desaId = $this->createDesa($kecamatanId);
+        $petaniId = $this->createPetani($desaId);
+        $lahanId = $this->createLahan($petaniId, $desaId, 1.25);
+        $komoditasId = DB::table('komoditas')->insertGetId([
+            'kode_komoditas' => 'KMD'.$this->nextSequence(),
+            'nama_komoditas' => 'Komoditas Pakai '.$this->nextSequence(),
+            'satuan_default' => 'kg',
+            'is_active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        DB::table('lahan_komoditas')->insert([
+            'lahan_id' => $lahanId,
+            'komoditas_id' => $komoditasId,
+            'tahun_tanam' => 2026,
+            'luas_tanam_ha' => 1.25,
+            'status_tanam' => 'tanam',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $response = $this->actingAs($admin)
+            ->from('/admin/komoditas')
+            ->delete(route('admin.komoditas.destroy', $komoditasId));
+
+        $response->assertRedirect('/admin/komoditas');
+        $response->assertSessionHas('error', 'Komoditas tidak dapat dihapus karena sudah dipakai pada data lahan komoditas.');
+        $this->assertDatabaseHas('komoditas', ['id' => $komoditasId]);
+    }
+
+    public function test_kecamatan_cannot_delete_petani_that_still_has_lahan(): void
+    {
+        $adminKecamatan = User::factory()->create([
+            'role' => User::ROLE_ADMIN_KECAMATAN,
+            'is_active' => true,
+        ]);
+        $kecamatanId = $this->createKecamatan();
+        $desaId = $this->createDesa($kecamatanId);
+        $this->assignWilayah($adminKecamatan->id, $kecamatanId);
+        $petaniId = $this->createPetani($desaId);
+        $this->createLahan($petaniId, $desaId, 1.10);
+
+        $response = $this->actingAs($adminKecamatan)
+            ->from('/kecamatan/petani-lahan')
+            ->delete(route('kecamatan.petani_lahan.petani.destroy', $petaniId));
+
+        $response->assertRedirect('/kecamatan/petani-lahan');
+        $response->assertSessionHas('error', 'Petani tidak dapat dihapus karena masih memiliki data lahan.');
+        $this->assertDatabaseHas('petani', ['id' => $petaniId]);
+    }
+
+    public function test_admin_force_delete_requires_exact_confirmation_key(): void
+    {
+        $admin = User::factory()->create([
+            'role' => User::ROLE_ADMIN_DINAS,
+            'is_active' => true,
+        ]);
+        $kecamatanId = $this->createKecamatan();
+
+        $response = $this->actingAs($admin)->deleteJson(
+            route('admin.cascade_delete.destroy', ['entity' => 'kecamatan', 'id' => $kecamatanId]),
+            ['confirmation_key' => 'SALAH']
+        );
+
+        $response->assertStatus(422);
+        $response->assertJson([
+            'message' => 'Kunci konfirmasi tidak sesuai. Ketik persis '.app(AdminCascadeDeleteService::class)->confirmationKey('kecamatan', $kecamatanId).'.',
+        ]);
+
+        $this->assertDatabaseHas('kecamatan', ['id' => $kecamatanId]);
+    }
+
+    public function test_admin_force_delete_kecamatan_removes_descendant_operational_data(): void
+    {
+        $admin = User::factory()->create([
+            'role' => User::ROLE_ADMIN_DINAS,
+            'is_active' => true,
+        ]);
+
+        $kecamatanId = $this->createKecamatan();
+        $desaId = $this->createDesa($kecamatanId);
+        $balaiId = $this->createBalai($kecamatanId);
+        $adminKecamatan = User::factory()->create([
+            'role' => User::ROLE_ADMIN_KECAMATAN,
+            'is_active' => true,
+        ]);
+        $this->assignWilayah($adminKecamatan->id, $kecamatanId);
+
+        ['user' => $penyuluhUser, 'penyuluh_id' => $penyuluhId] = $this->createPenyuluhProfile($balaiId);
+        $petaniId = $this->createPetani($desaId);
+        $lahanId = $this->createLahan($petaniId, $desaId, 2.35);
+        $komoditasId = $this->createKomoditas();
+        $lahanKomoditasId = DB::table('lahan_komoditas')->insertGetId([
+            'lahan_id' => $lahanId,
+            'komoditas_id' => $komoditasId,
+            'tahun_tanam' => 2026,
+            'luas_tanam_ha' => 2.35,
+            'status_tanam' => 'tanam',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $penugasanId = $this->createPenugasan($penyuluhId, $lahanId, $adminKecamatan->id);
+        $kunjunganId = $this->createKunjungan($penugasanId, 'menunggu');
+
+        DB::table('produksi_panen')->insert([
+            'lahan_komoditas_id' => $lahanKomoditasId,
+            'periode_id' => $this->createPeriode(),
+            'kunjungan_id' => $kunjunganId,
+            'tanggal_panen' => '2026-03-25',
+            'jumlah_produksi' => 300,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $usulanId = DB::table('usulan_perubahan_data')->insertGetId([
+            'penugasan_id' => $penugasanId,
+            'kunjungan_id' => $kunjunganId,
+            'diajukan_oleh_user_id' => $penyuluhUser->id,
+            'target_tipe' => 'lahan',
+            'target_id' => $lahanId,
+            'field_name' => 'luas_ha',
+            'nilai_lama' => '2.35',
+            'nilai_usulan' => '2.50',
+            'alasan' => 'Koreksi data lapangan',
+            'status' => 'menunggu',
+            'waktu_pengajuan' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        DB::table('notifikasi')->insert([
+            [
+                'user_id' => $adminKecamatan->id,
+                'judul' => 'Laporan Monitoring Baru',
+                'pesan' => 'Ada laporan baru.',
+                'ref_tipe' => 'kunjungan_monitoring',
+                'ref_id' => $kunjunganId,
+                'is_read' => false,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'user_id' => $penyuluhUser->id,
+                'judul' => 'Status usulan perubahan data',
+                'pesan' => 'Usulan diproses.',
+                'ref_tipe' => 'usulan_perubahan_data',
+                'ref_id' => $usulanId,
+                'is_read' => false,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+        ]);
+
+        DB::table('laporan_pimpinan')->insert([
+            'periode_id' => $this->createPeriode(4),
+            'generated_by_user_id' => $admin->id,
+            'jenis_laporan' => 'rekap_uji',
+            'file_url' => '/dummy/laporan-uji.pdf',
+            'generated_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        DB::table('laporan_pimpinan_kecamatan')->insert([
+            'laporan_id' => DB::table('laporan_pimpinan')->max('id'),
+            'kecamatan_id' => $kecamatanId,
+            'total_produksi' => 300,
+            'total_luas' => 2.35,
+            'total_petani' => 1,
+            'total_lahan' => 1,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        DB::table('password_reset_tokens')->insert([
+            'email' => $penyuluhUser->email,
+            'token' => 'dummy-token',
+            'created_at' => now(),
+        ]);
+
+        $response = $this->actingAs($admin)->deleteJson(
+            route('admin.cascade_delete.destroy', ['entity' => 'kecamatan', 'id' => $kecamatanId]),
+            ['confirmation_key' => app(AdminCascadeDeleteService::class)->confirmationKey('kecamatan', $kecamatanId)]
+        );
+
+        $response->assertOk();
+
+        $this->assertDatabaseMissing('kecamatan', ['id' => $kecamatanId]);
+        $this->assertDatabaseMissing('desa', ['id' => $desaId]);
+        $this->assertDatabaseMissing('balai_penyuluh', ['id' => $balaiId]);
+        $this->assertDatabaseMissing('user_wilayah', ['kecamatan_id' => $kecamatanId]);
+        $this->assertDatabaseMissing('users', ['id' => $adminKecamatan->id]);
+        $this->assertDatabaseMissing('penyuluh', ['id' => $penyuluhId]);
+        $this->assertDatabaseMissing('users', ['id' => $penyuluhUser->id]);
+        $this->assertDatabaseMissing('petani', ['id' => $petaniId]);
+        $this->assertDatabaseMissing('lahan', ['id' => $lahanId]);
+        $this->assertDatabaseMissing('lahan_komoditas', ['id' => $lahanKomoditasId]);
+        $this->assertDatabaseMissing('penugasan_penyuluh', ['id' => $penugasanId]);
+        $this->assertDatabaseMissing('kunjungan_monitoring', ['id' => $kunjunganId]);
+        $this->assertDatabaseMissing('produksi_panen', ['kunjungan_id' => $kunjunganId]);
+        $this->assertDatabaseMissing('usulan_perubahan_data', ['id' => $usulanId]);
+        $this->assertDatabaseMissing('laporan_pimpinan_kecamatan', ['kecamatan_id' => $kecamatanId]);
+        $this->assertDatabaseMissing('notifikasi', ['ref_tipe' => 'kunjungan_monitoring', 'ref_id' => $kunjunganId]);
+        $this->assertDatabaseMissing('notifikasi', ['ref_tipe' => 'usulan_perubahan_data', 'ref_id' => $usulanId]);
+        $this->assertDatabaseMissing('password_reset_tokens', ['email' => $penyuluhUser->email]);
+    }
+
+    public function test_admin_force_delete_komoditas_removes_downstream_rows_but_preserves_lahan(): void
+    {
+        $admin = User::factory()->create([
+            'role' => User::ROLE_ADMIN_DINAS,
+            'is_active' => true,
+        ]);
+
+        $kecamatanId = $this->createKecamatan();
+        $desaId = $this->createDesa($kecamatanId);
+        $petaniId = $this->createPetani($desaId);
+        $lahanId = $this->createLahan($petaniId, $desaId, 1.40);
+        $komoditasId = $this->createKomoditas();
+        $lahanKomoditasId = DB::table('lahan_komoditas')->insertGetId([
+            'lahan_id' => $lahanId,
+            'komoditas_id' => $komoditasId,
+            'tahun_tanam' => 2026,
+            'luas_tanam_ha' => 1.40,
+            'status_tanam' => 'panen',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        DB::table('map_marker_styles')->insert([
+            'style_code' => 'komoditas:'.$komoditasId,
+            'scope' => 'komoditas',
+            'komoditas_id' => $komoditasId,
+            'label' => 'Komoditas Uji',
+            'icon_symbol' => 'U',
+            'icon_color' => '#ffffff',
+            'bg_color' => '#198754',
+            'size' => 28,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        DB::table('produksi_panen')->insert([
+            'lahan_komoditas_id' => $lahanKomoditasId,
+            'periode_id' => $this->createPeriode(5),
+            'tanggal_panen' => '2026-05-18',
+            'jumlah_produksi' => 120,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $response = $this->actingAs($admin)->deleteJson(
+            route('admin.cascade_delete.destroy', ['entity' => 'komoditas', 'id' => $komoditasId]),
+            ['confirmation_key' => app(AdminCascadeDeleteService::class)->confirmationKey('komoditas', $komoditasId)]
+        );
+
+        $response->assertOk();
+
+        $this->assertDatabaseMissing('komoditas', ['id' => $komoditasId]);
+        $this->assertDatabaseMissing('lahan_komoditas', ['id' => $lahanKomoditasId]);
+        $this->assertDatabaseMissing('produksi_panen', ['lahan_komoditas_id' => $lahanKomoditasId]);
+        $this->assertDatabaseMissing('map_marker_styles', ['komoditas_id' => $komoditasId]);
+        $this->assertDatabaseHas('lahan', ['id' => $lahanId]);
+        $this->assertDatabaseHas('petani', ['id' => $petaniId]);
+    }
+
     private function assignWilayah(int $userId, int $kecamatanId): void
     {
         DB::table('user_wilayah')->insert([
@@ -388,6 +683,33 @@ class DomainRegressionTest extends TestCase
             'luas_ha' => $luasHa,
             'kondisi_lahan' => 'baik',
             'is_active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
+    private function createKomoditas(): int
+    {
+        $suffix = $this->nextSequence();
+
+        return DB::table('komoditas')->insertGetId([
+            'kode_komoditas' => 'KMD'.$suffix,
+            'nama_komoditas' => 'Komoditas '.$suffix,
+            'satuan_default' => 'kg',
+            'is_active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
+    private function createPeriode(int $bulan = 3): int
+    {
+        return DB::table('periode_laporan')->insertGetId([
+            'bulan' => $bulan,
+            'tahun' => 2026,
+            'tanggal_mulai' => sprintf('2026-%02d-01', $bulan),
+            'tanggal_selesai' => sprintf('2026-%02d-28', $bulan),
+            'status_periode' => 'terbuka',
             'created_at' => now(),
             'updated_at' => now(),
         ]);

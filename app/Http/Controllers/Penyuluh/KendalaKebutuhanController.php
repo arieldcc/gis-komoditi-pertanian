@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Penyuluh;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -84,7 +85,19 @@ class KendalaKebutuhanController extends Controller
 
     public function destroyKendala(int $id): RedirectResponse
     {
-        DB::table('kendala_kunjungan')->where('id', $id)->delete();
+        if (! DB::table('kendala_kunjungan')->where('id', $id)->exists()) {
+            return back()->with('error', 'Data kendala tidak ditemukan.');
+        }
+
+        try {
+            $deleted = DB::table('kendala_kunjungan')->where('id', $id)->delete();
+        } catch (QueryException) {
+            return back()->with('error', 'Data kendala tidak dapat dihapus karena masih digunakan data lain.');
+        }
+
+        if ($deleted < 1) {
+            return back()->with('error', 'Data kendala gagal dihapus karena masih digunakan data lain.');
+        }
 
         return back()->with('success', 'Data kendala berhasil dihapus.');
     }
@@ -130,7 +143,19 @@ class KendalaKebutuhanController extends Controller
 
     public function destroyKebutuhan(int $id): RedirectResponse
     {
-        DB::table('kebutuhan_kunjungan')->where('id', $id)->delete();
+        if (! DB::table('kebutuhan_kunjungan')->where('id', $id)->exists()) {
+            return back()->with('error', 'Data kebutuhan tidak ditemukan.');
+        }
+
+        try {
+            $deleted = DB::table('kebutuhan_kunjungan')->where('id', $id)->delete();
+        } catch (QueryException) {
+            return back()->with('error', 'Data kebutuhan tidak dapat dihapus karena masih digunakan data lain.');
+        }
+
+        if ($deleted < 1) {
+            return back()->with('error', 'Data kebutuhan gagal dihapus karena masih digunakan data lain.');
+        }
 
         return back()->with('success', 'Data kebutuhan berhasil dihapus.');
     }

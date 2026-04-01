@@ -170,6 +170,15 @@ function initializeRowActions() {
             if (payload) {
                 await runDeleteAction(payload);
             }
+            return;
+        }
+
+        const forceDeleteButton = event.target.closest('.js-row-force-delete');
+        if (forceDeleteButton) {
+            const payload = decodePayload(forceDeleteButton.dataset.row);
+            if (payload) {
+                await runForceDeleteAction(payload);
+            }
         }
     });
 }
@@ -282,6 +291,71 @@ async function runDeleteAction(payload) {
     }
 }
 
+async function runForceDeleteAction(payload) {
+    const forceConfig = payload.force_delete || null;
+    if (!forceConfig || !forceConfig.url || !forceConfig.confirmation_key) {
+        await Swal.fire({
+            icon: 'info',
+            title: 'Fitur Tidak Tersedia',
+            text: 'Penghapusan menyeluruh tidak tersedia untuk data ini.',
+        });
+        return;
+    }
+
+    const confirmation = await Swal.fire({
+        icon: 'warning',
+        title: 'Penghapusan Menyeluruh',
+        html: `
+            <div class="text-start small">
+                <p class="mb-2">${escapeHtml(forceConfig.label || 'Tindakan ini akan menghapus seluruh data turunan yang terkait.')}</p>
+                <div class="alert alert-danger py-2 px-3 mb-0">
+                    Ketik kunci berikut secara persis:<br>
+                    <strong>${escapeHtml(forceConfig.confirmation_key)}</strong>
+                </div>
+            </div>
+        `,
+        input: 'text',
+        inputLabel: 'Kunci Konfirmasi',
+        inputPlaceholder: 'Masukkan kunci konfirmasi',
+        showCancelButton: true,
+        confirmButtonText: 'Hapus Menyeluruh',
+        cancelButtonText: 'Batal',
+        confirmButtonColor: '#8b1e1e',
+        preConfirm: (value) => {
+            const normalized = String(value || '').trim().toUpperCase();
+            if (normalized !== String(forceConfig.confirmation_key).trim().toUpperCase()) {
+                Swal.showValidationMessage('Kunci konfirmasi tidak sesuai.');
+                return false;
+            }
+
+            return normalized;
+        },
+    });
+
+    if (!confirmation.isConfirmed) {
+        return;
+    }
+
+    try {
+        await fetchWithMethod(forceConfig.url, forceConfig.method || 'DELETE', {
+            confirmation_key: confirmation.value,
+        });
+        await Swal.fire({
+            icon: 'success',
+            title: 'Penghapusan Selesai',
+            timer: 1800,
+            showConfirmButton: false,
+        });
+        reloadAllDataTables();
+    } catch (error) {
+        await Swal.fire({
+            icon: 'error',
+            title: 'Penghapusan Gagal',
+            text: error.message || 'Terjadi kesalahan saat menghapus data secara menyeluruh.',
+        });
+    }
+}
+
 async function submitEditForm(form, editConfig) {
     const formData = new FormData(form);
     const payload = new FormData();
@@ -330,6 +404,28 @@ async function fetchWithMethod(url, method, fields) {
     });
 
     if (response.ok) {
+        const contentType = response.headers.get('content-type') || '';
+
+        if (contentType.includes('application/json')) {
+            return true;
+        }
+
+        if (contentType.includes('text/html')) {
+            const html = await response.text();
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            const flashError = doc.body?.dataset?.flashError || '';
+            const validationErrors = parseJson(doc.body?.dataset?.flashValidationErrors, []);
+
+            if (flashError) {
+                throw new Error(flashError);
+            }
+
+            if (Array.isArray(validationErrors) && validationErrors.length > 0) {
+                throw new Error(validationErrors[0]);
+            }
+        }
+
         return true;
     }
 

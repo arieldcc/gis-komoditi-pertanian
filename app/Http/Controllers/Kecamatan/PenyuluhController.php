@@ -263,8 +263,12 @@ class PenyuluhController extends Controller
             return back()->with('error', 'Data penyuluh tidak ditemukan di wilayah Anda.');
         }
 
+        if (DB::table('penugasan_penyuluh')->where('penyuluh_id', $id)->exists()) {
+            return back()->with('error', 'Penyuluh tidak dapat dihapus karena masih memiliki data penugasan.');
+        }
+
         try {
-            DB::table('users')->where('id', $target->user_id)->delete();
+            $deleted = DB::table('users')->where('id', $target->user_id)->delete();
 
             if (is_string($target->foto_penyuluh_url) && str_starts_with($target->foto_penyuluh_url, '/storage/')) {
                 $oldPath = str_replace('/storage/', '', $target->foto_penyuluh_url);
@@ -274,6 +278,10 @@ class PenyuluhController extends Controller
             }
         } catch (QueryException) {
             return back()->with('error', 'Penyuluh tidak dapat dihapus karena masih memiliki penugasan aktif.');
+        }
+
+        if ($deleted < 1) {
+            return back()->with('error', 'Penyuluh gagal dihapus karena masih digunakan data lain.');
         }
 
         return back()->with('success', 'Penyuluh berhasil dihapus.');
@@ -430,7 +438,11 @@ class PenyuluhController extends Controller
             return back()->with('error', 'Penugasan tidak dapat dihapus karena sudah memiliki data kunjungan. Ubah status menjadi selesai/dibatalkan.');
         }
 
-        DB::table('penugasan_penyuluh')->where('id', $id)->delete();
+        $deleted = DB::table('penugasan_penyuluh')->where('id', $id)->delete();
+
+        if ($deleted < 1) {
+            return back()->with('error', 'Penugasan gagal dihapus karena masih digunakan data lain.');
+        }
 
         return back()->with('success', 'Penugasan berhasil dihapus.');
     }

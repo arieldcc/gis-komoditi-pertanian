@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\BalaiPenyuluhController;
+use App\Http\Controllers\Admin\CascadeDeleteController;
 use App\Http\Controllers\Admin\KelompokTaniController as AdminKelompokTaniController;
 use App\Http\Controllers\Admin\KomoditasController;
 use App\Http\Controllers\Admin\LaporanController as AdminLaporanController;
@@ -84,6 +85,9 @@ Route::middleware('auth')->group(function () {
         Route::post('/balai/penyuluh', [BalaiPenyuluhController::class, 'storePenyuluh'])->name('balai.penyuluh.store');
         Route::put('/balai/penyuluh/{id}', [BalaiPenyuluhController::class, 'updatePenyuluh'])->name('balai.penyuluh.update');
         Route::delete('/balai/penyuluh/{id}', [BalaiPenyuluhController::class, 'destroyPenyuluh'])->name('balai.penyuluh.destroy');
+
+        Route::get('/penghapusan', [CascadeDeleteController::class, 'index'])->name('cascade_delete.index');
+        Route::delete('/penghapusan/{entity}/{id}', [CascadeDeleteController::class, 'destroy'])->name('cascade_delete.destroy');
 
         Route::get('/monitoring', [MonitoringController::class, 'index'])->name('monitoring');
         Route::post('/monitoring/{kunjunganId}/verify', [MonitoringController::class, 'verify'])->name('monitoring.verify');

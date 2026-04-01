@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Penyuluh;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -117,7 +118,20 @@ class ProduksiController extends Controller
 
     public function destroy(int $id): RedirectResponse
     {
-        DB::table('produksi_panen')->where('id', $id)->delete();
+        $exists = DB::table('produksi_panen')->where('id', $id)->exists();
+        if (! $exists) {
+            return back()->with('error', 'Data produksi panen tidak ditemukan.');
+        }
+
+        try {
+            $deleted = DB::table('produksi_panen')->where('id', $id)->delete();
+        } catch (QueryException) {
+            return back()->with('error', 'Data produksi panen tidak dapat dihapus karena masih digunakan data lain.');
+        }
+
+        if ($deleted < 1) {
+            return back()->with('error', 'Data produksi panen gagal dihapus karena masih digunakan data lain.');
+        }
 
         return back()->with('success', 'Data produksi panen berhasil dihapus.');
     }

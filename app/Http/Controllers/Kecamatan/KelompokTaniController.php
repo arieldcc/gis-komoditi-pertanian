@@ -76,10 +76,23 @@ class KelompokTaniController extends Controller
 
     public function destroy(int $id): RedirectResponse
     {
+        $kelompok = DB::table('master_kelompok_tani')->where('id', $id)->first(['id', 'nama_kelompok']);
+        if (! $kelompok) {
+            return back()->with('error', 'Master kelompok tani tidak ditemukan.');
+        }
+
+        if (DB::table('petani')->where('kelompok_tani', $kelompok->nama_kelompok)->exists()) {
+            return back()->with('error', 'Master kelompok tani tidak dapat dihapus karena masih dipakai pada data petani.');
+        }
+
         try {
-            DB::table('master_kelompok_tani')->where('id', $id)->delete();
+            $deleted = DB::table('master_kelompok_tani')->where('id', $id)->delete();
         } catch (QueryException) {
             return back()->with('error', 'Master kelompok tani tidak dapat dihapus.');
+        }
+
+        if ($deleted < 1) {
+            return back()->with('error', 'Master kelompok tani gagal dihapus karena masih digunakan data lain.');
         }
 
         return back()->with('success', 'Master kelompok tani berhasil dihapus.');

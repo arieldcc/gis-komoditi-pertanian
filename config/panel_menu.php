@@ -9,6 +9,7 @@ return [
         ['label' => 'Master Kelompok Tani', 'route' => 'admin.kelompok_tani'],
         ['label' => 'Style Ikon Peta', 'route' => 'admin.map_style'],
         ['label' => 'Data Balai & Penyuluh', 'route' => 'admin.balai'],
+        ['label' => 'Penghapusan Menyeluruh', 'route' => 'admin.cascade_delete.index'],
         ['label' => 'Monitoring Laporan', 'route' => 'admin.monitoring'],
         ['label' => 'Laporan Pimpinan', 'route' => 'admin.laporan'],
     ],

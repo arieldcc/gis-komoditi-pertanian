@@ -72,11 +72,24 @@ class KomoditasController extends Controller
 
     public function destroy(int $id): RedirectResponse
     {
+        $exists = DB::table('komoditas')->where('id', $id)->exists();
+        if (! $exists) {
+            return back()->with('error', 'Komoditas tidak ditemukan.');
+        }
+
+        if (DB::table('lahan_komoditas')->where('komoditas_id', $id)->exists()) {
+            return back()->with('error', 'Komoditas tidak dapat dihapus karena sudah dipakai pada data lahan komoditas.');
+        }
+
         try {
             DB::table('map_marker_styles')->where('style_code', 'komoditas:'.$id)->delete();
-            DB::table('komoditas')->where('id', $id)->delete();
+            $deleted = DB::table('komoditas')->where('id', $id)->delete();
         } catch (QueryException) {
             return back()->with('error', 'Komoditas tidak dapat dihapus karena sudah terpakai di data lahan.');
+        }
+
+        if ($deleted < 1) {
+            return back()->with('error', 'Komoditas gagal dihapus karena masih digunakan data lain.');
         }
 
         return back()->with('success', 'Komoditas berhasil dihapus.');

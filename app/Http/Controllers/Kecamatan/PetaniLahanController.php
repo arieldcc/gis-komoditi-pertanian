@@ -259,8 +259,12 @@ class PetaniLahanController extends Controller
             return back()->with('error', 'Data petani tidak ditemukan.');
         }
 
+        if (DB::table('lahan')->where('petani_id', $id)->exists()) {
+            return back()->with('error', 'Petani tidak dapat dihapus karena masih memiliki data lahan.');
+        }
+
         try {
-            DB::table('petani')->where('id', $id)->delete();
+            $deleted = DB::table('petani')->where('id', $id)->delete();
 
             if (is_string($existing->foto_petani_url) && str_starts_with($existing->foto_petani_url, '/storage/')) {
                 $oldPath = str_replace('/storage/', '', $existing->foto_petani_url);
@@ -270,6 +274,10 @@ class PetaniLahanController extends Controller
             }
         } catch (QueryException) {
             return back()->with('error', 'Petani tidak dapat dihapus karena masih memiliki data lahan.');
+        }
+
+        if ($deleted < 1) {
+            return back()->with('error', 'Petani gagal dihapus karena masih digunakan data lain.');
         }
 
         return back()->with('success', 'Petani berhasil dihapus.');
@@ -367,8 +375,16 @@ class PetaniLahanController extends Controller
             return back()->with('error', 'Data lahan tidak ditemukan.');
         }
 
+        if (DB::table('penugasan_penyuluh')->where('lahan_id', $id)->exists()) {
+            return back()->with('error', 'Lahan tidak dapat dihapus karena masih dipakai pada penugasan penyuluh.');
+        }
+
+        if (DB::table('lahan_komoditas')->where('lahan_id', $id)->exists()) {
+            return back()->with('error', 'Lahan tidak dapat dihapus karena masih memiliki data komoditas lahan.');
+        }
+
         try {
-            DB::table('lahan')->where('id', $id)->delete();
+            $deleted = DB::table('lahan')->where('id', $id)->delete();
 
             if (is_string($existing->foto_lahan_url) && str_starts_with($existing->foto_lahan_url, '/storage/')) {
                 $oldPath = str_replace('/storage/', '', $existing->foto_lahan_url);
@@ -378,6 +394,10 @@ class PetaniLahanController extends Controller
             }
         } catch (QueryException) {
             return back()->with('error', 'Lahan tidak dapat dihapus karena masih dipakai penugasan/komoditas.');
+        }
+
+        if ($deleted < 1) {
+            return back()->with('error', 'Lahan gagal dihapus karena masih digunakan data lain.');
         }
 
         return back()->with('success', 'Lahan berhasil dihapus.');
@@ -438,10 +458,22 @@ class PetaniLahanController extends Controller
 
     public function destroyLahanKomoditas(int $id): RedirectResponse
     {
+        if (! DB::table('lahan_komoditas')->where('id', $id)->exists()) {
+            return back()->with('error', 'Data lahan komoditas tidak ditemukan.');
+        }
+
+        if (DB::table('produksi_panen')->where('lahan_komoditas_id', $id)->exists()) {
+            return back()->with('error', 'Data lahan komoditas tidak dapat dihapus karena masih dipakai produksi panen.');
+        }
+
         try {
-            DB::table('lahan_komoditas')->where('id', $id)->delete();
+            $deleted = DB::table('lahan_komoditas')->where('id', $id)->delete();
         } catch (QueryException) {
             return back()->with('error', 'Data lahan komoditas tidak dapat dihapus karena masih dipakai produksi panen.');
+        }
+
+        if ($deleted < 1) {
+            return back()->with('error', 'Data lahan komoditas gagal dihapus karena masih digunakan data lain.');
         }
 
         return back()->with('success', 'Data lahan komoditas berhasil dihapus.');

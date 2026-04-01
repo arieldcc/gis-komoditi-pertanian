@@ -328,11 +328,19 @@ class BalaiPenyuluhController extends Controller
             return back()->with('error', 'Data balai tidak ditemukan.');
         }
 
+        if (DB::table('penyuluh')->where('balai_id', $targetBalai->id)->exists()) {
+            return back()->with('error', 'Balai tidak dapat dihapus karena masih memiliki data penyuluh.');
+        }
+
+        if (DB::table('lampiran_media')->where('balai_id', $targetBalai->id)->exists()) {
+            return back()->with('error', 'Balai tidak dapat dihapus karena masih memiliki media/foto yang terhubung.');
+        }
+
         $adminKecamatan = $this->adminKecamatanByKecamatan((int) $targetBalai->kecamatan_id);
 
         try {
-            DB::transaction(function () use ($targetBalai, $adminKecamatan): void {
-                DB::table('balai_penyuluh')->where('id', $targetBalai->id)->delete();
+            $deleted = DB::transaction(function () use ($targetBalai, $adminKecamatan): int {
+                $deleted = DB::table('balai_penyuluh')->where('id', $targetBalai->id)->delete();
 
                 if ($adminKecamatan) {
                     DB::table('user_wilayah')
@@ -347,9 +355,15 @@ class BalaiPenyuluhController extends Controller
                             'updated_at' => now(),
                         ]);
                 }
+
+                return $deleted;
             });
         } catch (QueryException) {
             return back()->with('error', 'Balai tidak dapat dihapus karena masih dipakai data penyuluh/media.');
+        }
+
+        if ($deleted < 1) {
+            return back()->with('error', 'Balai gagal dihapus karena masih digunakan data lain.');
         }
 
         return back()->with('success', 'Balai penyuluh berhasil dihapus. Akun admin kecamatan terkait dinonaktifkan.');
@@ -486,10 +500,17 @@ class BalaiPenyuluhController extends Controller
             );
         }
 
+        if (DB::table('penugasan_penyuluh')->where('penyuluh_id', $id)->exists()) {
+            return $this->deletePenyuluhResponse(
+                $request,
+                false,
+                'Data penyuluh tidak dapat dihapus karena masih memiliki data penugasan.'
+            );
+        }
+
         try {
-            DB::transaction(function () use ($id, $existing): void {
-                DB::table('penugasan_penyuluh')->where('penyuluh_id', $id)->delete();
-                DB::table('users')->where('id', $existing->user_id)->delete();
+            $deleted = DB::transaction(function () use ($existing): int {
+                return DB::table('users')->where('id', $existing->user_id)->delete();
             });
 
             if (is_string($existing->foto_penyuluh_url) && str_starts_with($existing->foto_penyuluh_url, '/storage/')) {
@@ -500,6 +521,10 @@ class BalaiPenyuluhController extends Controller
             }
         } catch (QueryException) {
             return $this->deletePenyuluhResponse($request, false, 'Data penyuluh tidak dapat dihapus karena masih dipakai data lain.');
+        }
+
+        if ($deleted < 1) {
+            return $this->deletePenyuluhResponse($request, false, 'Data penyuluh gagal dihapus karena masih digunakan data lain.');
         }
 
         return $this->deletePenyuluhResponse($request, true, 'Data penyuluh berhasil dihapus.');

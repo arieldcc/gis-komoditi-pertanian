@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Support\AdminCascadeDeleteService;
 use App\Support\MapStyleSupport;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\JsonResponse;
@@ -213,6 +214,12 @@ class PanelDataTableController extends Controller
                             'method' => 'DELETE',
                             'label' => 'Hapus kecamatan '.$row->nama_kecamatan.'?',
                         ],
+                        'force_delete' => $this->forceDeletePayload(
+                            entity: 'kecamatan',
+                            id: (int) $row->id,
+                            row: $row,
+                            label: 'Hapus menyeluruh kecamatan '.$row->nama_kecamatan.' beserta desa, balai, akun admin kecamatan, petani, lahan, penugasan, kunjungan, dan laporan kecamatan terkait?'
+                        ),
                     ])),
                 ];
             }
@@ -299,6 +306,12 @@ class PanelDataTableController extends Controller
                             'method' => 'DELETE',
                             'label' => 'Hapus desa '.$row->nama_desa.'?',
                         ],
+                        'force_delete' => $this->forceDeletePayload(
+                            entity: 'desa',
+                            id: (int) $row->id,
+                            row: $row,
+                            label: 'Hapus menyeluruh desa '.$row->nama_desa.' beserta petani, lahan, komoditas lahan, penugasan, kunjungan, dan data turunannya?'
+                        ),
                     ])),
                 ];
             }
@@ -354,6 +367,12 @@ class PanelDataTableController extends Controller
                             'method' => 'DELETE',
                             'label' => 'Hapus komoditas '.$row->nama_komoditas.'?',
                         ],
+                        'force_delete' => $this->forceDeletePayload(
+                            entity: 'komoditas',
+                            id: (int) $row->id,
+                            row: $row,
+                            label: 'Hapus menyeluruh komoditas '.$row->nama_komoditas.' beserta titik komoditas lahan, produksi, style ikon, dan usulan perubahan yang terkait?'
+                        ),
                     ])),
                 ];
             }
@@ -433,6 +452,14 @@ class PanelDataTableController extends Controller
                             'method' => 'DELETE',
                             'label' => 'Hapus master kelompok tani '.$row->nama_kelompok.'?',
                         ],
+                        'force_delete' => auth()->user()?->role === User::ROLE_ADMIN_DINAS
+                            ? $this->forceDeletePayload(
+                                entity: 'kelompok_tani',
+                                id: (int) $row->id,
+                                row: $row,
+                                label: 'Hapus menyeluruh master kelompok tani '.$row->nama_kelompok.' dan bersihkan semua referensinya pada data petani serta usulan perubahan?'
+                            )
+                            : null,
                     ])),
                 ];
             }
@@ -547,6 +574,12 @@ class PanelDataTableController extends Controller
                             'method' => 'DELETE',
                             'label' => 'Hapus balai '.$row->nama_balai.'?',
                         ],
+                        'force_delete' => $this->forceDeletePayload(
+                            entity: 'balai',
+                            id: (int) $row->id,
+                            row: $row,
+                            label: 'Hapus menyeluruh balai '.$row->nama_balai.' beserta akun admin kecamatan, penyuluh, penugasan, kunjungan, media, dan data turunannya?'
+                        ),
                     ])),
                 ];
             }
@@ -629,6 +662,12 @@ class PanelDataTableController extends Controller
                             'method' => 'DELETE',
                             'label' => 'Hapus penyuluh '.$row->nama_user.'?',
                         ],
+                        'force_delete' => $this->forceDeletePayload(
+                            entity: 'penyuluh',
+                            id: (int) $row->id,
+                            row: ['id' => (int) $row->id],
+                            label: 'Hapus menyeluruh penyuluh '.$row->nama_user.' beserta akun login, penugasan, kunjungan, lampiran media, dan data lapangan turunannya?'
+                        ),
                     ])),
                 ];
             }
@@ -2694,6 +2733,16 @@ class PanelDataTableController extends Controller
         );
     }
 
+    private function forceDeletePayload(string $entity, int $id, array|object $row, string $label): array
+    {
+        return [
+            'url' => route('admin.cascade_delete.destroy', ['entity' => $entity, 'id' => $id]),
+            'method' => 'DELETE',
+            'label' => $label,
+            'confirmation_key' => AdminCascadeDeleteService::rowConfirmationKey($entity, $row),
+        ];
+    }
+
     private function actionsHtml(string $payload): string
     {
         $escaped = e($payload);
@@ -2702,12 +2751,16 @@ class PanelDataTableController extends Controller
         $hasView = is_array($decodedPayload);
         $editConfig = is_array($decodedPayload) && is_array($decodedPayload['edit'] ?? null) ? $decodedPayload['edit'] : null;
         $deleteConfig = is_array($decodedPayload) && is_array($decodedPayload['delete'] ?? null) ? $decodedPayload['delete'] : null;
+        $forceDeleteConfig = is_array($decodedPayload) && is_array($decodedPayload['force_delete'] ?? null) ? $decodedPayload['force_delete'] : null;
 
         $hasEdit = is_array($editConfig)
             && ! empty($editConfig['url'])
             && is_array($editConfig['fields'] ?? null)
             && count($editConfig['fields']) > 0;
         $hasDelete = is_array($deleteConfig) && ! empty($deleteConfig['url']);
+        $hasForceDelete = is_array($forceDeleteConfig)
+            && ! empty($forceDeleteConfig['url'])
+            && ! empty($forceDeleteConfig['confirmation_key']);
 
         $buttons = '';
         if ($hasView) {
@@ -2718,6 +2771,9 @@ class PanelDataTableController extends Controller
         }
         if ($hasDelete) {
             $buttons .= '<button type="button" class="btn btn-outline-danger btn-sm js-row-delete" data-row="'.$escaped.'">Delete</button>';
+        }
+        if ($hasForceDelete) {
+            $buttons .= '<button type="button" class="btn btn-danger btn-sm js-row-force-delete" data-row="'.$escaped.'">Hapus Total</button>';
         }
 
         return (string) new HtmlString(
