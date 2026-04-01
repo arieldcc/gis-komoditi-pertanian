@@ -31,6 +31,12 @@
                             <label class="form-check-label" for="remember">Ingat saya</label>
                         </div>
 
+                        <div class="text-end">
+                            <a href="{{ route('password.request') }}" class="link-success text-decoration-none fw-semibold">
+                                Lupa Password?
+                            </a>
+                        </div>
+
                         <button type="submit" class="btn btn-success w-100">Login</button>
                     </form>
 

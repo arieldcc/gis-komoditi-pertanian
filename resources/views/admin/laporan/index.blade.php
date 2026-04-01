@@ -44,6 +44,9 @@
     <div class="col-lg-7">
         <div class="panel-card p-3 mb-3">
             <h6 class="fw-semibold">Buat Laporan Pimpinan</h6>
+            <div class="alert alert-light border small mb-3">
+                URL dokumen PDF dibuat otomatis oleh sistem setelah laporan disimpan, sehingga file selalu mengarah ke PDF laporan yang bisa diakses.
+            </div>
             <form method="POST" action="{{ route('admin.laporan.store') }}" class="row g-2">
                 @csrf
                 <div class="col-md-4">
@@ -54,8 +57,7 @@
                         @endforeach
                     </select>
                 </div>
-                <div class="col-md-4"><input class="form-control" name="jenis_laporan" placeholder="Jenis Laporan" required></div>
-                <div class="col-md-4"><input class="form-control" name="file_url" placeholder="Path/URL Dokumen" required></div>
+                <div class="col-md-8"><input class="form-control" name="jenis_laporan" placeholder="Jenis Laporan" required></div>
                 <div class="col-12"><button class="btn btn-success btn-sm">Simpan Laporan</button></div>
             </form>
         </div>

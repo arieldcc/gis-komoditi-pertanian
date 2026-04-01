@@ -178,7 +178,7 @@ class PenyuluhController extends Controller
     {
         $kecamatanIds = $this->managedKecamatanIds();
 
-        $existing = DB::table('penyuluh')->where('id', $id)->first(['foto_penyuluh_url']);
+        $existing = DB::table('penyuluh')->where('id', $id)->first(['user_id', 'foto_penyuluh_url']);
         if (! $existing) {
             return back()->with('error', 'Data penyuluh tidak ditemukan di wilayah Anda.');
         }
@@ -203,6 +203,15 @@ class PenyuluhController extends Controller
             return back()->with('error', 'Data penyuluh tidak ditemukan di wilayah Anda.');
         }
 
+        $balaiValid = DB::table('balai_penyuluh')
+            ->where('id', $data['balai_id'])
+            ->whereIn('kecamatan_id', $kecamatanIds)
+            ->exists();
+
+        if (! $balaiValid) {
+            return back()->with('error', 'Balai tujuan tidak termasuk wilayah admin kecamatan Anda.');
+        }
+
         $fotoPenyuluhUrl = $existing->foto_penyuluh_url;
         if ($request->hasFile('foto_penyuluh')) {
             $newPath = $request->file('foto_penyuluh')->store('penyuluh/foto', 'public');
@@ -216,16 +225,25 @@ class PenyuluhController extends Controller
             }
         }
 
-        DB::table('penyuluh')->where('id', $id)->update([
-            'balai_id' => $data['balai_id'],
-            'nip' => $data['nip'] ?? null,
-            'jabatan' => $data['jabatan'] ?? null,
-            'lokasi_penugasan' => $data['lokasi_penugasan'] ?? null,
-            'tugas_tambahan' => $data['tugas_tambahan'] ?? null,
-            'foto_penyuluh_url' => $fotoPenyuluhUrl,
-            'is_active' => (bool) ($data['is_active'] ?? false),
-            'updated_at' => now(),
-        ]);
+        DB::transaction(function () use ($data, $id, $existing, $fotoPenyuluhUrl): void {
+            $isActive = (bool) ($data['is_active'] ?? false);
+
+            DB::table('penyuluh')->where('id', $id)->update([
+                'balai_id' => $data['balai_id'],
+                'nip' => $data['nip'] ?? null,
+                'jabatan' => $data['jabatan'] ?? null,
+                'lokasi_penugasan' => $data['lokasi_penugasan'] ?? null,
+                'tugas_tambahan' => $data['tugas_tambahan'] ?? null,
+                'foto_penyuluh_url' => $fotoPenyuluhUrl,
+                'is_active' => $isActive,
+                'updated_at' => now(),
+            ]);
+
+            DB::table('users')->where('id', $existing->user_id)->update([
+                'is_active' => $isActive,
+                'updated_at' => now(),
+            ]);
+        });
 
         return back()->with('success', 'Penyuluh berhasil diperbarui.');
     }
@@ -238,7 +256,7 @@ class PenyuluhController extends Controller
             ->join('balai_penyuluh', 'balai_penyuluh.id', '=', 'penyuluh.balai_id')
             ->where('penyuluh.id', $id)
             ->whereIn('balai_penyuluh.kecamatan_id', $kecamatanIds)
-            ->select('penyuluh.id', 'penyuluh.foto_penyuluh_url')
+            ->select('penyuluh.id', 'penyuluh.user_id', 'penyuluh.foto_penyuluh_url')
             ->first();
 
         if (! $target) {
@@ -246,7 +264,7 @@ class PenyuluhController extends Controller
         }
 
         try {
-            DB::table('penyuluh')->where('id', $id)->delete();
+            DB::table('users')->where('id', $target->user_id)->delete();
 
             if (is_string($target->foto_penyuluh_url) && str_starts_with($target->foto_penyuluh_url, '/storage/')) {
                 $oldPath = str_replace('/storage/', '', $target->foto_penyuluh_url);

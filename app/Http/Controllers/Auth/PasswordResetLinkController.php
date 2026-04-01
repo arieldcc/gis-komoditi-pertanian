@@ -5,40 +5,78 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 class PasswordResetLinkController extends Controller
 {
-    /**
-     * Display the password reset link request view.
-     */
-    public function create(): View
+    private function captchaQuestion(Request $request): string
     {
-        return view('auth.forgot-password');
+        $left = random_int(1, 9);
+        $right = random_int(1, 9);
+        $request->session()->put('password_reset_captcha_answer', (string) ($left + $right));
+
+        return $left.' + '.$right;
     }
 
     /**
-     * Handle an incoming password reset link request.
-     *
-     * @throws \Illuminate\Validation\ValidationException
+     * Display the password reset link request view.
+     */
+    public function create(Request $request): View
+    {
+        return view('auth.forgot-password', [
+            'captchaQuestion' => $this->captchaQuestion($request),
+        ]);
+    }
+
+    /**
+     * Handle a local password reset request without sending email.
      */
     public function store(Request $request): RedirectResponse
     {
-        $request->validate([
+        $validated = $request->validate([
             'email' => ['required', 'email'],
+            'captcha_answer' => ['required', 'string'],
         ]);
 
-        // We will send the password reset link to this user. Once we have attempted
-        // to send the link, we will examine the response then see the message we
-        // need to show to the user. Finally, we'll send out a proper response.
-        $status = Password::sendResetLink(
-            $request->only('email')
+        $expectedAnswer = (string) $request->session()->pull('password_reset_captcha_answer', '');
+        if ($expectedAnswer === '' || trim((string) $validated['captcha_answer']) !== $expectedAnswer) {
+            return back()
+                ->withInput($request->only('email'))
+                ->withErrors(['captcha_answer' => 'Captcha tidak sesuai. Silakan coba lagi.']);
+        }
+
+        $user = DB::table('users')
+            ->where('email', $validated['email'])
+            ->first(['email', 'is_active']);
+
+        if (! $user) {
+            return back()
+                ->withInput($request->only('email'))
+                ->withErrors(['email' => 'Email tidak terdaftar pada sistem.']);
+        }
+
+        if (! $user->is_active) {
+            return back()
+                ->withInput($request->only('email'))
+                ->withErrors(['email' => 'Akun tidak aktif. Hubungi admin dinas.']);
+        }
+
+        $plainToken = Str::random(64);
+
+        DB::table('password_reset_tokens')->updateOrInsert(
+            ['email' => $validated['email']],
+            [
+                'token' => Hash::make($plainToken),
+                'created_at' => now(),
+            ]
         );
 
-        return $status == Password::RESET_LINK_SENT
-                    ? back()->with('status', __($status))
-                    : back()->withInput($request->only('email'))
-                        ->withErrors(['email' => __($status)]);
+        return redirect()->route('password.reset', [
+            'token' => $plainToken,
+            'email' => $validated['email'],
+        ])->with('status', 'Verifikasi berhasil. Silakan buat password baru Anda.');
     }
 }

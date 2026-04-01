@@ -40,6 +40,9 @@ Route::get('/dashboard', [DashboardController::class, 'index'])
 
 Route::middleware('auth')->group(function () {
     Route::get('/datatable/{source}', [PanelDataTableController::class, 'index'])->name('datatable.index');
+    Route::get('/laporan-pdf/{laporanId}', [AdminLaporanController::class, 'previewPdf'])
+        ->middleware('role:admin_dinas,pimpinan_dinas')
+        ->name('laporan.preview_pdf');
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
@@ -125,7 +128,6 @@ Route::middleware('auth')->group(function () {
 
         Route::get('/verifikasi', [VerifikasiController::class, 'index'])->name('verifikasi');
         Route::post('/verifikasi/{kunjunganId}', [VerifikasiController::class, 'update'])->name('verifikasi.update');
-        Route::delete('/verifikasi/{kunjunganId}', [VerifikasiController::class, 'destroy'])->name('verifikasi.destroy');
         Route::post('/verifikasi/usulan/{id}', [VerifikasiController::class, 'updateUsulan'])->name('verifikasi.usulan.update');
 
         Route::get('/rekap', [RekapController::class, 'index'])->name('rekap');

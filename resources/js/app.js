@@ -870,12 +870,14 @@ function buildViewHtml(payload, responseFormId = '') {
         ? '<div class="sig-modal-map mt-3" data-dialog-map></div>'
         : '';
 
+    const documentHtml = buildDocumentPreviewHtml(payload);
     const responseHtml = payload.response_form
         ? buildViewResponseHtml(payload.response_form, responseFormId)
         : '';
 
     return `
         ${imageHtml}
+        ${documentHtml}
         <div class="table-responsive">
             <table class="table table-sm align-middle mb-0">
                 <tbody>${fieldRows || '<tr><td class="text-muted">Tidak ada detail data.</td></tr>'}</tbody>
@@ -883,6 +885,43 @@ function buildViewHtml(payload, responseFormId = '') {
         </div>
         ${mapHtml}
         ${responseHtml}
+    `;
+}
+
+function buildDocumentPreviewHtml(payload) {
+    const documentUrl = String(payload?.document_url || '').trim();
+    if (!documentUrl) {
+        return '';
+    }
+
+    const label = escapeHtml(payload?.document_label || 'Dokumen');
+    const documentType = String(payload?.document_type || '').toLowerCase();
+    const openButton = `
+        <div class="d-flex justify-content-end mb-2">
+            <a href="${escapeHtml(documentUrl)}" target="_blank" rel="noopener noreferrer" class="btn btn-outline-danger btn-sm">${label}</a>
+        </div>
+    `;
+
+    if (documentType === 'pdf') {
+        return `
+            <div class="mb-3">
+                ${openButton}
+                <div class="border rounded overflow-hidden bg-body-tertiary">
+                    <iframe
+                        src="${escapeHtml(documentUrl)}"
+                        title="${label}"
+                        style="width:100%;height:70vh;min-height:420px;border:0;"
+                    ></iframe>
+                </div>
+            </div>
+        `;
+    }
+
+    return `
+        <div class="alert alert-light border d-flex justify-content-between align-items-center gap-2 mb-3">
+            <span class="small text-muted">Dokumen tersedia untuk dibuka.</span>
+            <a href="${escapeHtml(documentUrl)}" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary btn-sm">${label}</a>
+        </div>
     `;
 }
 

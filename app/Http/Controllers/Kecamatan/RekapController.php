@@ -21,16 +21,31 @@ class RekapController extends Controller
     {
         $kecamatanIds = $this->managedKecamatanIds();
 
-        $summary = DB::table('kecamatan')
-            ->leftJoin('desa', 'desa.kecamatan_id', '=', 'kecamatan.id')
+        $petaniSummary = DB::table('desa')
             ->leftJoin('petani', 'petani.desa_id', '=', 'desa.id')
+            ->groupBy('desa.kecamatan_id')
+            ->selectRaw('desa.kecamatan_id')
+            ->selectRaw('COUNT(DISTINCT petani.id) as total_petani');
+
+        $lahanSummary = DB::table('desa')
             ->leftJoin('lahan', 'lahan.desa_id', '=', 'desa.id')
-            ->whereIn('kecamatan.id', $kecamatanIds)
-            ->groupBy('kecamatan.id', 'kecamatan.nama_kecamatan')
-            ->selectRaw('kecamatan.nama_kecamatan')
-            ->selectRaw('COUNT(DISTINCT petani.id) as total_petani')
+            ->groupBy('desa.kecamatan_id')
+            ->selectRaw('desa.kecamatan_id')
             ->selectRaw('COUNT(DISTINCT lahan.id) as total_lahan')
-            ->selectRaw('COALESCE(SUM(lahan.luas_ha),0) as total_luas')
+            ->selectRaw('COALESCE(SUM(lahan.luas_ha),0) as total_luas');
+
+        $summary = DB::table('kecamatan')
+            ->leftJoinSub($petaniSummary, 'petani_summary', function ($join): void {
+                $join->on('petani_summary.kecamatan_id', '=', 'kecamatan.id');
+            })
+            ->leftJoinSub($lahanSummary, 'lahan_summary', function ($join): void {
+                $join->on('lahan_summary.kecamatan_id', '=', 'kecamatan.id');
+            })
+            ->whereIn('kecamatan.id', $kecamatanIds)
+            ->selectRaw('kecamatan.nama_kecamatan')
+            ->selectRaw('COALESCE(petani_summary.total_petani,0) as total_petani')
+            ->selectRaw('COALESCE(lahan_summary.total_lahan,0) as total_lahan')
+            ->selectRaw('COALESCE(lahan_summary.total_luas,0) as total_luas')
             ->orderBy('kecamatan.nama_kecamatan')
             ->get();
 

@@ -415,7 +415,7 @@ class BalaiPenyuluhController extends Controller
 
     public function updatePenyuluh(Request $request, int $id): RedirectResponse
     {
-        $existing = DB::table('penyuluh')->where('id', $id)->first(['foto_penyuluh_url']);
+        $existing = DB::table('penyuluh')->where('id', $id)->first(['user_id', 'foto_penyuluh_url']);
         if (! $existing) {
             return back()->with('error', 'Data penyuluh tidak ditemukan.');
         }
@@ -443,23 +443,32 @@ class BalaiPenyuluhController extends Controller
             }
         }
 
-        DB::table('penyuluh')->where('id', $id)->update([
-            'balai_id' => $data['balai_id'],
-            'nip' => $data['nip'] ?? null,
-            'jabatan' => $data['jabatan'] ?? null,
-            'lokasi_penugasan' => $data['lokasi_penugasan'] ?? null,
-            'tugas_tambahan' => $data['tugas_tambahan'] ?? null,
-            'foto_penyuluh_url' => $fotoPenyuluhUrl,
-            'is_active' => (bool) ($data['is_active'] ?? false),
-            'updated_at' => now(),
-        ]);
+        DB::transaction(function () use ($data, $id, $existing, $fotoPenyuluhUrl): void {
+            $isActive = (bool) ($data['is_active'] ?? false);
+
+            DB::table('penyuluh')->where('id', $id)->update([
+                'balai_id' => $data['balai_id'],
+                'nip' => $data['nip'] ?? null,
+                'jabatan' => $data['jabatan'] ?? null,
+                'lokasi_penugasan' => $data['lokasi_penugasan'] ?? null,
+                'tugas_tambahan' => $data['tugas_tambahan'] ?? null,
+                'foto_penyuluh_url' => $fotoPenyuluhUrl,
+                'is_active' => $isActive,
+                'updated_at' => now(),
+            ]);
+
+            DB::table('users')->where('id', $existing->user_id)->update([
+                'is_active' => $isActive,
+                'updated_at' => now(),
+            ]);
+        });
 
         return back()->with('success', 'Data penyuluh berhasil diperbarui.');
     }
 
     public function destroyPenyuluh(Request $request, int $id): RedirectResponse|JsonResponse
     {
-        $existing = DB::table('penyuluh')->where('id', $id)->first(['id', 'foto_penyuluh_url']);
+        $existing = DB::table('penyuluh')->where('id', $id)->first(['id', 'user_id', 'foto_penyuluh_url']);
         if (! $existing) {
             return $this->deletePenyuluhResponse($request, false, 'Data penyuluh tidak ditemukan.', 404);
         }
@@ -478,9 +487,9 @@ class BalaiPenyuluhController extends Controller
         }
 
         try {
-            DB::transaction(function () use ($id): void {
+            DB::transaction(function () use ($id, $existing): void {
                 DB::table('penugasan_penyuluh')->where('penyuluh_id', $id)->delete();
-                DB::table('penyuluh')->where('id', $id)->delete();
+                DB::table('users')->where('id', $existing->user_id)->delete();
             });
 
             if (is_string($existing->foto_penyuluh_url) && str_starts_with($existing->foto_penyuluh_url, '/storage/')) {
